@@ -33,8 +33,12 @@ class HomeScreen extends StatelessWidget {
                   backgroundColor: Colors.white,
                   child: Icon(Icons.person, color: Colors.green)),
             ),
-            const Text("Lv. 3 • 120 XP", style: TextStyle(fontSize: 18)),
-            const Icon(Icons.star, color: Colors.yellow),
+            IconButton(
+              icon: const Icon(Icons.logout, color: Colors.white),
+              onPressed: () {
+                Navigator.pushReplacementNamed(context, "/login");
+              },
+            ),
           ],
         ),
       ),
@@ -48,17 +52,28 @@ class HomeScreen extends StatelessWidget {
               InkWell(
                 borderRadius: BorderRadius.circular(55),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SublevelScreen(
-                        gameType: stage["type"] as String,
-                        maxLevel: stage["type"] == "alphabet"
-                            ? 3
-                            : (stage["type"] == "vowel" ? 5 : 1),
+                  if (stage["type"] == "surah") {
+                    // ถ้าเป็น นครแห่งอายะห์ → ไป SurahScreen ทันที
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SurahScreen(),
                       ),
-                    ),
-                  );
+                    );
+                  } else {
+                    // ถ้าเป็น อักษร หรือ สระ → ไป SublevelScreen ตามปกติ
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SublevelScreen(
+                          gameType: stage["type"] as String,
+                          maxLevel: stage["type"] == "alphabet"
+                              ? 3
+                              : (stage["type"] == "vowel" ? 5 : 1),
+                        ),
+                      ),
+                    );
+                  }
                 },
                 child: CircleAvatar(
                   radius: 55,

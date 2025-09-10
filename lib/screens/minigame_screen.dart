@@ -75,9 +75,9 @@ class _MinigameScreenState extends State<MinigameScreen> {
         vowelLevels[lvl] = [];
         for (int i = 1; i <= count; i++) {
           vowelLevels[lvl]!.add({
-            "char": "V$lvl\_$i",
+            "char": "V$lvl\\_$i",
             "image":
-                "assets/png/vowels/Vowels$lvl\_$i${(lvl <= 2 ? '.jpg' : '.png')}",
+                "assets/png/vowels/Vowels$lvl\_$i.jpg",
             "audio": "assets/audio/vowels/loud_loud_Vowels$lvl\_$i.m4a",
           });
         }
@@ -93,7 +93,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
       sourceList = _wrongQuestions;
     } else if (letters.isEmpty || levelCompleted) return;
 
-    // รีเซ็ต history ถ้าใช้ครบทุกคำถาม
     if (_recentQuestions.length >= sourceList.length) {
       _recentQuestions.clear();
     }
@@ -101,7 +100,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
     final random = Random();
     Map<String, String> candidate;
 
-    // เลือกโจทย์ที่ไม่เคยใช้มาก่อน
     do {
       candidate = sourceList[random.nextInt(sourceList.length)];
     } while (_recentQuestions.any((q) => q["char"] == candidate["char"]));
@@ -109,7 +107,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
     correctLetter = candidate;
     _recentQuestions.add(correctLetter);
 
-    // สร้าง options
     options = [correctLetter];
     while (options.length < 4) {
       final item = letters[random.nextInt(letters.length)];
@@ -117,14 +114,12 @@ class _MinigameScreenState extends State<MinigameScreen> {
     }
     options.shuffle();
 
-    // รีเซ็ตสถานะปุ่มและข้อความ
     message = "";
     feedbackColor = Colors.transparent;
     selectedOption = null;
     answered = false;
     setState(() {});
 
-    // เล่นเสียงโจทย์อัตโนมัติ
     _playSound(correctLetter["audio"]!);
   }
 
@@ -147,8 +142,13 @@ class _MinigameScreenState extends State<MinigameScreen> {
           _wrongQuestions.removeWhere((q) => q["char"] == correctLetter["char"]);
         }
       });
-      await FirestoreService()
-          .savePracticeResult(widget.gameType, "✅ ดีเยี่ยม");
+
+      // ✅ บันทึกไป Firestore
+      await FirestoreService().savePracticeResult(
+        widget.gameType,
+        "✅ ดีเยี่ยม",
+        sublevel: level,
+      );
     } else {
       setState(() {
         message = "❌ ผิด!";
@@ -156,23 +156,14 @@ class _MinigameScreenState extends State<MinigameScreen> {
         answered = true;
         if (!reviewingWrong) _wrongQuestions.add(correctLetter);
       });
-      await FirestoreService()
-          .savePracticeResult(widget.gameType, "⚠️ พยายามเข้า");
-    }
-  }
 
-  void _nextLevel() {
-    xp = 0;
-    levelCompleted = false;
-    reviewingWrong = false;
-    _wrongQuestions.clear();
-    if (widget.gameType == "alphabet") {
-      if (level < 3) level++;
-    } else if (widget.gameType == "vowel") {
-      if (level < 5) level++;
+      // ✅ บันทึกไป Firestore
+      await FirestoreService().savePracticeResult(
+        widget.gameType,
+        "⚠️ พยายามเข้า",
+        sublevel: level,
+      );
     }
-    _initLetters();
-    _generateQuestion();
   }
 
   String _getLevelName() {
@@ -195,12 +186,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Progress Bar
             Row(
               children: [
-                Text("Lv. $level",
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -213,13 +200,11 @@ class _MinigameScreenState extends State<MinigameScreen> {
                     ),
                   ),
                 ),
-                Text("$xp / $xpForNextLevel XP",
+                Text("$xp / $xpForNextLevel ข้อ",
                     style: const TextStyle(fontSize: 14)),
               ],
             ),
             const SizedBox(height: 40),
-
-            // ปุ่มเล่นเสียงหลัก (คำถาม)
             CircleAvatar(
               radius: 45,
               backgroundColor: Colors.blue.shade100,
@@ -230,8 +215,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
               ),
             ),
             const SizedBox(height: 40),
-
-            // Grid การ์ด
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
@@ -259,9 +242,9 @@ class _MinigameScreenState extends State<MinigameScreen> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(24),
                       onTap: () {
-                        _playSound(opt["audio"]!); // ✅ กดการ์ด = เล่นเสียง
+                        _playSound(opt["audio"]!);
                         setState(() {
-                          selectedOption = opt; // ✅ เลือกการ์ด
+                          selectedOption = opt;
                         });
                       },
                       child: Padding(
@@ -273,10 +256,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                 }).toList(),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // Feedback
             if (message.isNotEmpty)
               Text(
                 message,
@@ -285,10 +265,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                     fontWeight: FontWeight.bold,
                     color: feedbackColor),
               ),
-
             const SizedBox(height: 20),
-
-            // ปุ่มกดตอบ
             if (selectedOption != null && !answered)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -306,8 +283,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
                 label: const Text("ยืนยัน",
                     style: TextStyle(fontSize: 18, color: Colors.white)),
               ),
-
-            // ปุ่มไปข้อต่อไป
             if (answered && !levelCompleted)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -325,8 +300,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
                 label: const Text("ข้อต่อไป",
                     style: TextStyle(fontSize: 18, color: Colors.white)),
               ),
-
-            // ปุ่ม Next Level / รอบแก้คำตอบผิด
             if (levelCompleted)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -338,24 +311,12 @@ class _MinigameScreenState extends State<MinigameScreen> {
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
                 onPressed: () {
-                  if (_wrongQuestions.isNotEmpty && !reviewingWrong) {
-                    // เริ่มรอบแก้คำตอบผิด
-                    reviewingWrong = true;
-                    _recentQuestions.clear();
-                    _generateQuestion();
-                  } else {
-                    // Next Level จริง ๆ
-                    _nextLevel();
-                  }
+                  Navigator.pop(context); // ✅ กลับไปเลือกด่านย่อย
                 },
-                icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                label: Text(
-                    reviewingWrong && _wrongQuestions.isNotEmpty
-                        ? "แก้คำตอบผิด"
-                        : "Next Level",
-                    style: const TextStyle(fontSize: 18, color: Colors.white)),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                label: const Text("กลับไปเลือกด่าน",
+                    style: TextStyle(fontSize: 18, color: Colors.white)),
               ),
-
             const SizedBox(height: 20),
           ],
         ),

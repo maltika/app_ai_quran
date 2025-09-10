@@ -59,16 +59,14 @@ class _SurahDetailScreenState extends State<SurahDetailScreen> {
         correctCount++;
         showNextButton = true;
       });
-      await FirestoreService()
-          .savePracticeResult(widget.title, "อายะห์ $currentAyah: ✅ ดีเยี่ยม");
+      await FirestoreService().savePracticeResult(widget.title, "✅ ดีเยี่ยม");
     } else {
       setState(() {
         message = "❌ ผิด!";
         wrongCount++;
         showNextButton = true;
       });
-      await FirestoreService().savePracticeResult(
-          widget.title, "อายะห์ $currentAyah: ⚠️ พยายามเข้า");
+      await FirestoreService().savePracticeResult(widget.title, "❌ พยายามเข้า");
     }
   }
 

@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "419491151036",
-    "project_id": "quran-ai-app-739a4",
-    "storage_bucket": "quran-ai-app-739a4.firebasestorage.app"
+    "project_number": "766436027583",
+    "project_id": "flutterauth-b0783",
+    "storage_bucket": "flutterauth-b0783.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:419491151036:android:f98a71051e4faa5056a4b9",
+        "mobilesdk_app_id": "1:766436027583:android:033516aff4b45536f12a0a",
         "android_client_info": {
           "package_name": "com.example.app_ai_quran"
         }
@@ -15,7 +15,26 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDA2kmhmq8I0a2E7jIxDEZUL6VXZDdXMgw"
+          "current_key": "AIzaSyD6YDwdIYgW8OHjbEocCIWmTFXh0E9KE54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:766436027583:android:26fe9a9a8ec8ea5ff12a0a",
+        "android_client_info": {
+          "package_name": "com.example.mytravel"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6YDwdIYgW8OHjbEocCIWmTFXh0E9KE54"
         }
       ],
       "services": {
