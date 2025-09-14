@@ -26,23 +26,27 @@ class _MinigameScreenState extends State<MinigameScreen> {
   Color feedbackColor = Colors.transparent;
   bool answered = false;
 
-  // XP & Level
+  // ระบบ 10 คำถาม
+  int questionCount = 0;
+  final int totalQuestions = 10;
+
+  // ✅ เก็บ history ของคำถามล่าสุด
+  final List<Map<String, String>> _recentQuestions = [];
+
+  // ✅ เก็บคำตอบผิด
+  final List<Map<String, String>> _wrongQuestions = [];
+  bool reviewingWrong = false;
+
+  // XP & Level (จะบันทึกตอนจบจริง)
   int xp = 0;
   int level = 1;
   int xpForNextLevel = 10;
   bool levelCompleted = false;
 
-  // ✅ เก็บ history ของคำถามล่าสุด
-  final List<Map<String, String>> _recentQuestions = [];
-
-  // ✅ เก็บคำตอบผิดและตรวจสอบรอบแก้คำตอบผิด
-  final List<Map<String, String>> _wrongQuestions = [];
-  bool reviewingWrong = false;
-
   @override
   void initState() {
     super.initState();
-    level = widget.startLevel; // เริ่มจากด่านย่อยที่เลือก
+    level = widget.startLevel;
     _initLetters();
     _generateQuestion();
   }
@@ -51,16 +55,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
     letters = [];
     if (widget.gameType == "alphabet") {
       int start = 1, end = 10;
-      if (level == 1) {
-        start = 1;
-        end = 10;
-      } else if (level == 2) {
-        start = 11;
-        end = 20;
-      } else if (level == 3) {
-        start = 21;
-        end = 29;
-      }
+      if (level == 1) start = 1;
+      if (level == 2) start = 11;
+      if (level == 3) start = 21;
+      if (level == 3) end = 29;
       for (int i = start; i <= end; i++) {
         letters.add({
           "char": "อักษร $i",
@@ -75,9 +73,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
         vowelLevels[lvl] = [];
         for (int i = 1; i <= count; i++) {
           vowelLevels[lvl]!.add({
-            "char": "V$lvl\\_$i",
-            "image":
-                "assets/png/vowels/Vowels$lvl\_$i.jpg",
+            "char": "V$lvl\_$i",
+            "image": "assets/png/vowels/Vowels$lvl\_$i.jpg",
             "audio": "assets/audio/vowels/loud_loud_Vowels$lvl\_$i.m4a",
           });
         }
@@ -87,19 +84,22 @@ class _MinigameScreenState extends State<MinigameScreen> {
   }
 
   void _generateQuestion() {
-    List<Map<String, String>> sourceList = letters;
+    List<Map<String, String>> sourceList =
+        reviewingWrong && _wrongQuestions.isNotEmpty
+            ? _wrongQuestions
+            : letters;
 
-    if (reviewingWrong && _wrongQuestions.isNotEmpty) {
-      sourceList = _wrongQuestions;
-    } else if (letters.isEmpty || levelCompleted) return;
+    if (sourceList.isEmpty) return;
 
     if (_recentQuestions.length >= sourceList.length) {
+      // ถ้าเลือกคำถามครบทั้งหมดแล้ว random ใหม่
       _recentQuestions.clear();
     }
 
     final random = Random();
     Map<String, String> candidate;
 
+    // เลือกคำถามไม่ซ้ำ
     do {
       candidate = sourceList[random.nextInt(sourceList.length)];
     } while (_recentQuestions.any((q) => q["char"] == candidate["char"]));
@@ -128,27 +128,17 @@ class _MinigameScreenState extends State<MinigameScreen> {
     await _player.play(AssetSource(path.replaceFirst("assets/", "")));
   }
 
-  void _checkAnswer(Map<String, String> answer) async {
+  void _checkAnswer(Map<String, String> answer) {
     if (answer["char"] == correctLetter["char"]) {
       setState(() {
         message = "✅ ถูกต้อง!";
         feedbackColor = Colors.green.shade400;
-        xp++;
-        if (xp >= xpForNextLevel) {
-          levelCompleted = true;
-        }
         answered = true;
         if (reviewingWrong) {
-          _wrongQuestions.removeWhere((q) => q["char"] == correctLetter["char"]);
+          _wrongQuestions
+              .removeWhere((q) => q["char"] == correctLetter["char"]);
         }
       });
-
-      // ✅ บันทึกไป Firestore
-      await FirestoreService().savePracticeResult(
-        widget.gameType,
-        "✅ ดีเยี่ยม",
-        sublevel: level,
-      );
     } else {
       setState(() {
         message = "❌ ผิด!";
@@ -156,14 +146,103 @@ class _MinigameScreenState extends State<MinigameScreen> {
         answered = true;
         if (!reviewingWrong) _wrongQuestions.add(correctLetter);
       });
-
-      // ✅ บันทึกไป Firestore
-      await FirestoreService().savePracticeResult(
-        widget.gameType,
-        "⚠️ พยายามเข้า",
-        sublevel: level,
-      );
     }
+  }
+
+  // เพิ่มตัวแปรช่วยนับ XP จริง
+  int _currentXp = 0;
+
+  void _nextStep() async {
+    int xpThisQuestion = 0;
+    if (selectedOption != null) {
+      if (selectedOption!["char"] == correctLetter["char"]) {
+        // ถ้าอยู่รอบแก้คำตอบ → 8 XP / ข้อ, รอบปกติ → 10 XP / ข้อ
+        xpThisQuestion = reviewingWrong ? 8 : 10;
+      }
+      _currentXp += xpThisQuestion;
+    }
+
+    questionCount++;
+
+    if (!reviewingWrong &&
+        questionCount >= totalQuestions &&
+        _wrongQuestions.isNotEmpty) {
+      // เข้าโหมดแก้คำตอบ
+      reviewingWrong = true;
+      questionCount = 0;
+      _recentQuestions.clear();
+      _generateQuestion();
+      return;
+    }
+
+    if (!reviewingWrong && questionCount >= totalQuestions) {
+      // เล่นครบ 10 ข้อ + ไม่มีคำถามผิด
+      _finishLevel();
+      return;
+    }
+
+    if (reviewingWrong && _wrongQuestions.isEmpty) {
+      // แก้คำตอบผิดหมดแล้ว
+      _finishLevel();
+      return;
+    }
+
+    _generateQuestion();
+  }
+
+  void _finishLevel() async {
+    setState(() {
+      levelCompleted = true;
+      xp = _currentXp;
+    });
+
+    String resultText = _wrongQuestions.isEmpty ? "✅ ดีเยี่ยม" : "💪 พยายาม";
+
+    // กำหนดชื่อด่านใหญ่
+    String levelName = "";
+    if (widget.gameType == "alphabet")
+      levelName = "หมู่บ้านอักษร";
+    else if (widget.gameType == "vowel") 
+      levelName = "โอเอซิสแห่งสระ";
+    // เพิ่มกรณีอื่น ๆ ของด่านใหญ่อีกได้
+
+    await FirestoreService().addXpOnce(
+      _currentXp,
+      sublevel: level,
+      resultText: resultText,
+      levelName: levelName,
+    );
+  }
+
+  Future<bool> _onWillPop() async {
+    if (!levelCompleted) {
+      bool exit = false;
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("ยืนยันการออก"),
+          content:
+              const Text("ถ้าออกตอนนี้ คุณจะไม่ได้รับ XP จากการเล่นครั้งนี้"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                exit = true;
+                Navigator.of(context).pop();
+              },
+              child: const Text("ออก"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("ยกเลิก"),
+            ),
+          ],
+        ),
+      );
+      return exit;
+    }
+    return true;
   }
 
   String _getLevelName() {
@@ -173,152 +252,182 @@ class _MinigameScreenState extends State<MinigameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double progress = xp / xpForNextLevel;
+    double progress = (questionCount + (reviewingWrong ? totalQuestions : 0)) /
+        (totalQuestions + totalQuestions);
 
-    return Scaffold(
-      backgroundColor: feedbackColor.withOpacity(0.05),
-      appBar: AppBar(
-        title: Text(_getLevelName()),
-        centerTitle: true,
-        backgroundColor: Colors.deepPurple,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: feedbackColor.withOpacity(0.05),
+        appBar: AppBar(
+          title: Text(_getLevelName()),
+          centerTitle: true,
+          backgroundColor: Colors.deepPurple,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 14,
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.green,
-                      backgroundColor: Colors.grey.shade300,
-                    ),
-                  ),
-                ),
-                Text("$xp / $xpForNextLevel ข้อ",
-                    style: const TextStyle(fontSize: 14)),
-              ],
-            ),
-            const SizedBox(height: 40),
-            CircleAvatar(
-              radius: 45,
-              backgroundColor: Colors.blue.shade100,
-              child: IconButton(
-                icon: const Icon(Icons.volume_up,
-                    size: 45, color: Colors.deepPurple),
-                onPressed: () => _playSound(correctLetter["audio"]!),
-              ),
-            ),
-            const SizedBox(height: 40),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                children: options.map((opt) {
-                  bool isSelected = selectedOption == opt;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.shade100 : Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                          color:
-                              isSelected ? Colors.blue : Colors.grey.shade300,
-                          width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 6,
-                          offset: const Offset(3, 3),
-                        ),
-                      ],
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(24),
-                      onTap: () {
-                        _playSound(opt["audio"]!);
-                        setState(() {
-                          selectedOption = opt;
-                        });
-                      },
+                // Progress bar
+                Row(
+                  children: [
+                    Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Image.asset(opt["image"]!, fit: BoxFit.contain),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: LinearProgressIndicator(
+                          value: reviewingWrong
+                              ? (_wrongQuestions.isEmpty
+                                  ? 1.0
+                                  : questionCount /
+                                      _wrongQuestions.length) // same logic
+                              : questionCount / totalQuestions,
+                          minHeight: 14,
+                          borderRadius: BorderRadius.circular(12),
+                          color: reviewingWrong ? Colors.orange : Colors.green,
+                          backgroundColor: Colors.grey.shade300,
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
+                    const SizedBox(width: 8),
+                    Text(
+                      reviewingWrong
+                          ? "รอบแก้ไขเหลือ ${_wrongQuestions.length - questionCount} ข้อ"
+                          : "$questionCount / $totalQuestions ข้อ",
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 40),
+
+                // CircleAvatar
+                CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Colors.blue.shade100,
+                  child: IconButton(
+                    icon: const Icon(Icons.volume_up,
+                        size: 45, color: Colors.deepPurple),
+                    onPressed: () => _playSound(correctLetter["audio"]!),
+                  ),
+                ),
+                const SizedBox(height: 40),
+
+                // GridView
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 20,
+                  children: options.map((opt) {
+                    bool isSelected = selectedOption == opt;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.blue.shade100 : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color:
+                              isSelected ? Colors.blue : Colors.grey.shade300,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 6,
+                            offset: const Offset(3, 3),
+                          ),
+                        ],
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(24),
+                        onTap: () {
+                          _playSound(opt["audio"]!);
+                          setState(() {
+                            selectedOption = opt;
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child:
+                              Image.asset(opt["image"]!, fit: BoxFit.contain),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 20),
+
+                if (message.isNotEmpty)
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: feedbackColor,
+                    ),
+                  ),
+                const SizedBox(height: 20),
+
+                if (selectedOption != null && !answered)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                    ),
+                    onPressed: () {
+                      _checkAnswer(selectedOption!);
+                    },
+                    icon: const Icon(Icons.check, color: Colors.white),
+                    label: const Text("ยืนยัน",
+                        style: TextStyle(fontSize: 18, color: Colors.white)),
+                  ),
+
+                if (answered && !levelCompleted)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                    ),
+                    onPressed: _nextStep,
+                    icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                    label: const Text("ข้อต่อไป",
+                        style: TextStyle(fontSize: 18, color: Colors.white)),
+                  ),
+
+                if (levelCompleted)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    label: const Text("กลับไปเลือกด่าน",
+                        style: TextStyle(fontSize: 18, color: Colors.white)),
+                  ),
+
+                const SizedBox(height: 20),
+              ],
             ),
-            const SizedBox(height: 20),
-            if (message.isNotEmpty)
-              Text(
-                message,
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: feedbackColor),
-              ),
-            const SizedBox(height: 20),
-            if (selectedOption != null && !answered)
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: () {
-                  _checkAnswer(selectedOption!);
-                },
-                icon: const Icon(Icons.check, color: Colors.white),
-                label: const Text("ยืนยัน",
-                    style: TextStyle(fontSize: 18, color: Colors.white)),
-              ),
-            if (answered && !levelCompleted)
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: () {
-                  _generateQuestion();
-                },
-                icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                label: const Text("ข้อต่อไป",
-                    style: TextStyle(fontSize: 18, color: Colors.white)),
-              ),
-            if (levelCompleted)
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: () {
-                  Navigator.pop(context); // ✅ กลับไปเลือกด่านย่อย
-                },
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                label: const Text("กลับไปเลือกด่าน",
-                    style: TextStyle(fontSize: 18, color: Colors.white)),
-              ),
-            const SizedBox(height: 20),
-          ],
+          ),
         ),
       ),
     );
