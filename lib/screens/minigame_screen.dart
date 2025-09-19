@@ -37,6 +37,9 @@ class _MinigameScreenState extends State<MinigameScreen> {
   final List<Map<String, String>> _wrongQuestions = [];
   bool reviewingWrong = false;
 
+  // ✅ เก็บจำนวนคำถามผิดตอนเริ่มรอบแก้ไข
+  int maxWrongQuestions = 0;
+
   // XP & Level (จะบันทึกตอนจบจริง)
   int xp = 0;
   int level = 1;
@@ -55,10 +58,17 @@ class _MinigameScreenState extends State<MinigameScreen> {
     letters = [];
     if (widget.gameType == "alphabet") {
       int start = 1, end = 10;
-      if (level == 1) start = 1;
-      if (level == 2) start = 11;
-      if (level == 3) start = 21;
-      if (level == 3) end = 29;
+      if (level == 1) {
+        start = 1;
+        end = 10;
+      } else if (level == 2) {
+        start = 11;
+        end = 20;
+      } else if (level == 3) {
+        start = 21;
+        end = 29;
+      }
+
       for (int i = start; i <= end; i++) {
         letters.add({
           "char": "อักษร $i",
@@ -70,12 +80,16 @@ class _MinigameScreenState extends State<MinigameScreen> {
       Map<int, List<Map<String, String>>> vowelLevels = {};
       for (int lvl = 1; lvl <= 5; lvl++) {
         int count = (lvl <= 2) ? 28 : 10;
+
+        // ✅ กำหนดนามสกุลไฟล์ตามเลเวล
+        String ext = (lvl <= 2) ? "jpg" : "png";
+
         vowelLevels[lvl] = [];
         for (int i = 1; i <= count; i++) {
           vowelLevels[lvl]!.add({
-            "char": "V$lvl\_$i",
-            "image": "assets/png/vowels/Vowels$lvl\_$i.jpg",
-            "audio": "assets/audio/vowels/loud_loud_Vowels$lvl\_$i.m4a",
+            "char": "V${lvl}_$i",
+            "image": "assets/png/vowels/Vowels${lvl}_$i.$ext",
+            "audio": "assets/audio/vowels/loud_loud_Vowels${lvl}_$i.m4a",
           });
         }
       }
@@ -169,6 +183,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
         _wrongQuestions.isNotEmpty) {
       // เข้าโหมดแก้คำตอบ
       reviewingWrong = true;
+      maxWrongQuestions = _wrongQuestions.length; // ✅ เก็บจำนวนคำถามผิดเริ่มต้น
       questionCount = 0;
       _recentQuestions.clear();
       _generateQuestion();
@@ -202,8 +217,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
     String levelName = "";
     if (widget.gameType == "alphabet")
       levelName = "หมู่บ้านอักษร";
-    else if (widget.gameType == "vowel") 
-      levelName = "โอเอซิสแห่งสระ";
+    else if (widget.gameType == "vowel") levelName = "โอเอซิสแห่งสระ";
     // เพิ่มกรณีอื่น ๆ ของด่านใหญ่อีกได้
 
     await FirestoreService().addXpOnce(
@@ -211,6 +225,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
       sublevel: level,
       resultText: resultText,
       levelName: levelName,
+      gameType: widget.gameType, // ✅ ส่ง gameType เข้าไป
     );
   }
 
@@ -280,8 +295,9 @@ class _MinigameScreenState extends State<MinigameScreen> {
                           value: reviewingWrong
                               ? (_wrongQuestions.isEmpty
                                   ? 1.0
-                                  : questionCount /
-                                      _wrongQuestions.length) // same logic
+                                  : 1 -
+                                      (_wrongQuestions.length /
+                                          maxWrongQuestions)) // ✅ ใช้ maxWrongQuestions
                               : questionCount / totalQuestions,
                           minHeight: 14,
                           borderRadius: BorderRadius.circular(12),
@@ -293,7 +309,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                     const SizedBox(width: 8),
                     Text(
                       reviewingWrong
-                          ? "รอบแก้ไขเหลือ ${_wrongQuestions.length - questionCount} ข้อ"
+                          ? "รอบแก้ไขเหลือ ${_wrongQuestions.length} ข้อ"
                           : "$questionCount / $totalQuestions ข้อ",
                       style: const TextStyle(fontSize: 14),
                     ),

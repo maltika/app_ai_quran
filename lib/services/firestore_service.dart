@@ -35,12 +35,14 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
+  
   /// สำหรับบันทึก XP แบบรวมทั้งด่าน
   Future<void> addXpOnce(
     int gainedXp, {
     int sublevel = 1,
     String resultText = "✅ ดีเยี่ยม",
     String levelName = "Unknown Level", // ส่งชื่อด่านใหญ่เข้ามา
+    String gameType = "", // เพิ่ม type เกม เช่น "alphabet" หรือ "vowel"
   }) async {
     if (uid == null || gainedXp <= 0) return;
 
@@ -56,7 +58,7 @@ class FirestoreService {
 
     await userRef.collection("practice_logs").add({
       "levelName": levelName, // ด่านใหญ่
-      "type": "Level $sublevel", // ด่านย่อย
+      "type": "$gameType level $sublevel", // <-- ✅ แก้ตรงนี้
       "result": resultText, // ✅ ดีเยี่ยม หรือ 💪 พยายาม
       "xpGained": gainedXp,
       "sublevel": sublevel,
