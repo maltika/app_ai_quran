@@ -21,18 +21,61 @@
   <meta name="description" content="A new Flutter project.">
 
   <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="app_ai_quran">
+  <meta name="apple-mobile-web-app-title" content="your_app">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>app_ai_quran</title>
+  <!-- เพิ่ม meta tags สำหรับ microphone permission -->
+  <meta name="permissions" content="microphone">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+  <title>your_app</title>
   <link rel="manifest" href="manifest.json">
+
+  <script>
+    // The value below is injected by flutter build, do not touch.
+    var serviceWorkerVersion = null;
+  </script>
+  <!-- This script adds the flutter initialization JS code -->
+  <script src="flutter.js" defer></script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <div id="loading">
+    <div style="text-align: center; padding: 50px;">
+      <div>กำลังโหลด...</div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function(ev) {
+      // Download main.dart.js
+      _flutter.loader.loadEntrypoint({
+        serviceWorker: {
+          serviceWorkerVersion: serviceWorkerVersion,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+
+    // เพิ่ม error handler สำหรับ microphone
+    window.addEventListener('error', function(e) {
+      console.log('Error:', e);
+    });
+
+    // ตรวจสอบการรองรับ MediaRecorder API
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.warn('MediaRecorder API ไม่รองรับในเบราว์เซอร์นี้');
+    }
+  </script>
 </body>
 </html>

@@ -1,56 +1,92 @@
-// import 'package:flutter/material.dart';
-// import 'minigame_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
-// class StageSelectionScreen extends StatelessWidget {
-//   const StageSelectionScreen({super.key});
+class TestRecordScreen extends StatefulWidget {
+  const TestRecordScreen({super.key});
 
-//   final List<Map<String, dynamic>> stages = const [
-//     {"name": "หมู่บ้านตัวอักษร", "type": "alphabet", "sub": 3},
-//     {"name": "โอเอซิสแห่งสระ", "type": "vowel", "sub": 5},
-//     {"name": "นครแห่งอายะห์", "type": "ayah", "sub": 2},
-//   ];
+  @override
+  State<TestRecordScreen> createState() => _TestRecordScreenState();
+}
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text("เลือกด่าน")),
-//       body: ListView.builder(
-//         itemCount: stages.length,
-//         itemBuilder: (context, index) {
-//           final stage = stages[index];
-//           return ListTile(
-//             title: Text(stage['name']),
-//             subtitle: Text('ด่านย่อย ${stage['sub']} ด่าน'),
-//             onTap: () {
-//               if(stage['type'] == 'ayah'){
-//                 // เลือก Surah
-//                 final surahs = ['Al-Fatiha','Al-Ikhlas'];
-//                 Navigator.push(
-//                   context,
-//                   MaterialPageRoute(
-//                     builder: (_) => MinigameScreen(
-//                       gameType: stage['type'],
-//                       subStageCount: stage['sub'],
-//                       surahName: surahs[0],
-//                       totalAyah: 7, // สมมติ Al-Fatiha มี 7 อายะห์
-//                     ),
-//                   ),
-//                 );
-//               } else {
-//                 Navigator.push(
-//                   context,
-//                   MaterialPageRoute(
-//                     builder: (_) => MinigameScreen(
-//                       gameType: stage['type'],
-//                       subStageCount: stage['sub'],
-//                     ),
-//                   ),
-//                 );
-//               }
-//             },
-//           );
-//         },
-//       ),
-//     );
-//   }
-// }
+class _TestRecordScreenState extends State<TestRecordScreen> {
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _isRecording = false;
+  String? _filePath;
+
+  Future<void> _startRecording() async {
+    final hasPermission = await _recorder.hasPermission();
+    if (!hasPermission) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ ไม่มีสิทธิ์เข้าถึงไมค์")),
+      );
+      return;
+    }
+
+    // ใช้ documents directory ของแอพ (ไม่ติด Scoped Storage)
+    final dir = await getApplicationDocumentsDirectory();
+    final filePath = "${dir.path}/my_record.m4a";
+
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc, // ใช้ .m4a
+        bitRate: 128000,
+        sampleRate: 44100,
+      ),
+      path: filePath,
+    );
+
+    setState(() {
+      _isRecording = true;
+      _filePath = filePath;
+    });
+  }
+
+  Future<void> _stopRecording() async {
+    final path = await _recorder.stop();
+    setState(() {
+      _isRecording = false;
+      _filePath = path; // path จริง ๆ ที่บันทึกได้
+    });
+
+    if (path != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("✅ บันทึกเสียงแล้ว: $path")),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("ทดสอบอัดเสียง")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isRecording)
+              ElevatedButton(
+                onPressed: _stopRecording,
+                child: const Text("หยุดอัด"),
+              )
+            else
+              ElevatedButton(
+                onPressed: _startRecording,
+                child: const Text("เริ่มอัดเสียง"),
+              ),
+            const SizedBox(height: 20),
+            if (_filePath != null)
+              Text("ไฟล์: $_filePath", textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}

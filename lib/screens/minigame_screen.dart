@@ -30,14 +30,14 @@ class _MinigameScreenState extends State<MinigameScreen> {
   int questionCount = 0;
   final int totalQuestions = 10;
 
-  // ✅ เก็บ history ของคำถามล่าสุด
+  // เก็บ history ของคำถามล่าสุด
   final List<Map<String, String>> _recentQuestions = [];
 
-  // ✅ เก็บคำตอบผิด
+  // เก็บคำตอบผิด
   final List<Map<String, String>> _wrongQuestions = [];
   bool reviewingWrong = false;
 
-  // ✅ เก็บจำนวนคำถามผิดตอนเริ่มรอบแก้ไข
+  // เก็บจำนวนคำถามผิดตอนเริ่มรอบแก้ไข
   int maxWrongQuestions = 0;
 
   // XP & Level (จะบันทึกตอนจบจริง)
@@ -81,7 +81,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
       for (int lvl = 1; lvl <= 5; lvl++) {
         int count = (lvl <= 2) ? 28 : 10;
 
-        // ✅ กำหนดนามสกุลไฟล์ตามเลเวล
+        // กำหนดนามสกุลไฟล์ตามเลเวล
         String ext = (lvl <= 2) ? "jpg" : "png";
 
         vowelLevels[lvl] = [];
@@ -183,7 +183,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
         _wrongQuestions.isNotEmpty) {
       // เข้าโหมดแก้คำตอบ
       reviewingWrong = true;
-      maxWrongQuestions = _wrongQuestions.length; // ✅ เก็บจำนวนคำถามผิดเริ่มต้น
+      maxWrongQuestions = _wrongQuestions.length; // เก็บจำนวนคำถามผิดเริ่มต้น
       questionCount = 0;
       _recentQuestions.clear();
       _generateQuestion();
@@ -225,7 +225,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
       sublevel: level,
       resultText: resultText,
       levelName: levelName,
-      gameType: widget.gameType, // ✅ ส่ง gameType เข้าไป
+      gameType: widget.gameType, // ส่ง gameType เข้าไป
     );
   }
 
@@ -235,22 +235,36 @@ class _MinigameScreenState extends State<MinigameScreen> {
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text("ยืนยันการออก"),
-          content:
-              const Text("ถ้าออกตอนนี้ คุณจะไม่ได้รับ XP จากการเล่นครั้งนี้"),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 28),
+              SizedBox(width: 10),
+              Text("ยืนยันการออก", style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            "ถ้าออกตอนนี้ คุณจะไม่ได้รับ XP จากการเล่นครั้งนี้",
+            style: TextStyle(fontSize: 16),
+          ),
           actions: [
             TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text("ยกเลิก", style: TextStyle(fontSize: 16)),
+            ),
+            ElevatedButton(
               onPressed: () {
                 exit = true;
                 Navigator.of(context).pop();
               },
-              child: const Text("ออก"),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("ยกเลิก"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text("ออก", style: TextStyle(fontSize: 16)),
             ),
           ],
         ),
@@ -265,6 +279,42 @@ class _MinigameScreenState extends State<MinigameScreen> {
     return "Vowels$level";
   }
 
+  Widget _buildGradientButton({
+    required VoidCallback onPressed,
+    required String text,
+    required IconData icon,
+    required List<Color> colors,
+    double fontSize = 18,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: colors.first.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white),
+        label: Text(
+          text,
+          style: TextStyle(fontSize: fontSize, color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double progress = (questionCount + (reviewingWrong ? totalQuestions : 0)) /
@@ -273,174 +323,266 @@ class _MinigameScreenState extends State<MinigameScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        backgroundColor: feedbackColor.withOpacity(0.05),
-        appBar: AppBar(
-          title: Text(_getLevelName()),
-          centerTitle: true,
-          backgroundColor: Colors.deepPurple,
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF4CAF50), // สีเขียว
+                Color(0xFF81C784), // สีเขียวอ่อน
+              ],
+            ),
+          ),
+          child: SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Progress bar
-                Row(
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                // Custom App Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: () async {
+                          if (await _onWillPop()) {
+                            Navigator.pop(context);
+                          }
+                        },
+                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _getLevelName(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(width: 48), // Balance the back button
+                    ],
+                  ),
+                ),
+                
+                // Progress Section
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            reviewingWrong ? "รอบแก้ไข" : "คำถาม",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            reviewingWrong
+                                ? "เหลือ ${_wrongQuestions.length} ข้อ"
+                                : "$questionCount / $totalQuestions ข้อ",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
                           value: reviewingWrong
                               ? (_wrongQuestions.isEmpty
                                   ? 1.0
-                                  : 1 -
-                                      (_wrongQuestions.length /
-                                          maxWrongQuestions)) // ✅ ใช้ maxWrongQuestions
+                                  : 1 - (_wrongQuestions.length / maxWrongQuestions))
                               : questionCount / totalQuestions,
-                          minHeight: 14,
-                          borderRadius: BorderRadius.circular(12),
-                          color: reviewingWrong ? Colors.orange : Colors.green,
-                          backgroundColor: Colors.grey.shade300,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      reviewingWrong
-                          ? "รอบแก้ไขเหลือ ${_wrongQuestions.length} ข้อ"
-                          : "$questionCount / $totalQuestions ข้อ",
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 40),
-
-                // CircleAvatar
-                CircleAvatar(
-                  radius: 45,
-                  backgroundColor: Colors.blue.shade100,
-                  child: IconButton(
-                    icon: const Icon(Icons.volume_up,
-                        size: 45, color: Colors.deepPurple),
-                    onPressed: () => _playSound(correctLetter["audio"]!),
-                  ),
-                ),
-                const SizedBox(height: 40),
-
-                // GridView
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 20,
-                  mainAxisSpacing: 20,
-                  children: options.map((opt) {
-                    bool isSelected = selectedOption == opt;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.blue.shade100 : Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color:
-                              isSelected ? Colors.blue : Colors.grey.shade300,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 6,
-                            offset: const Offset(3, 3),
+                          minHeight: 8,
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            reviewingWrong ? Colors.orange : Colors.white,
                           ),
-                        ],
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24),
-                        onTap: () {
-                          _playSound(opt["audio"]!);
-                          setState(() {
-                            selectedOption = opt;
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child:
-                              Image.asset(opt["image"]!, fit: BoxFit.contain),
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ],
+                  ),
                 ),
-
-                const SizedBox(height: 20),
-
-                if (message.isNotEmpty)
-                  Text(
-                    message,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: feedbackColor,
-                    ),
-                  ),
-                const SizedBox(height: 20),
-
-                if (selectedOption != null && !answered)
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                
+                // Main Content
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 20),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
                     ),
-                    onPressed: () {
-                      _checkAnswer(selectedOption!);
-                    },
-                    icon: const Icon(Icons.check, color: Colors.white),
-                    label: const Text("ยืนยัน",
-                        style: TextStyle(fontSize: 18, color: Colors.white)),
-                  ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 30),
 
-                if (answered && !levelCompleted)
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                            // Audio Button
+                            Center(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.3),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                child: CircleAvatar(
+                                  radius: 50,
+                                  backgroundColor: Colors.transparent,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.volume_up,
+                                        size: 50, color: Colors.white),
+                                    onPressed: () => _playSound(correctLetter["audio"]!),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 40),
+
+                            // Options Grid
+                            GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 15,
+                              mainAxisSpacing: 15,
+                              children: options.map((opt) {
+                                bool isSelected = selectedOption == opt;
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  decoration: BoxDecoration(
+                                    gradient: isSelected 
+                                      ? const LinearGradient(
+                                          colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                                        )
+                                      : null,
+                                    color: isSelected ? null : Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: isSelected 
+                                        ? Colors.green 
+                                        : Colors.grey.withOpacity(0.3),
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: isSelected 
+                                          ? Colors.green.withOpacity(0.3)
+                                          : Colors.grey.withOpacity(0.1),
+                                        blurRadius: isSelected ? 10 : 5,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(20),
+                                      onTap: () {
+                                        _playSound(opt["audio"]!);
+                                        setState(() {
+                                          selectedOption = opt;
+                                        });
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Image.asset(
+                                          opt["image"]!, 
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+
+                            const SizedBox(height: 30),
+
+                            // Feedback Message
+                            if (message.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                decoration: BoxDecoration(
+                                  color: feedbackColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(15),
+                                  border: Border.all(
+                                    color: feedbackColor.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  message,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: feedbackColor,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+
+                            const SizedBox(height: 20),
+
+                            // Action Buttons
+                            if (selectedOption != null && !answered)
+                              _buildGradientButton(
+                                onPressed: () => _checkAnswer(selectedOption!),
+                                text: "ยืนยัน",
+                                icon: Icons.check,
+                                colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                              ),
+
+                            if (answered && !levelCompleted)
+                              _buildGradientButton(
+                                onPressed: _nextStep,
+                                text: "ข้อต่อไป",
+                                icon: Icons.arrow_forward,
+                                colors: const [Color(0xFF2196F3), Color(0xFF1976D2)],
+                              ),
+
+                            if (levelCompleted)
+                              _buildGradientButton(
+                                onPressed: () => Navigator.pop(context),
+                                text: "กลับไปเลือกด่าน",
+                                icon: Icons.home,
+                                colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                              ),
+
+                            const SizedBox(height: 30),
+                          ],
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
                     ),
-                    onPressed: _nextStep,
-                    icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                    label: const Text("ข้อต่อไป",
-                        style: TextStyle(fontSize: 18, color: Colors.white)),
                   ),
-
-                if (levelCompleted)
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    label: const Text("กลับไปเลือกด่าน",
-                        style: TextStyle(fontSize: 18, color: Colors.white)),
-                  ),
-
-                const SizedBox(height: 20),
+                ),
               ],
             ),
           ),
