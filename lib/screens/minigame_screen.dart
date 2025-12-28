@@ -73,7 +73,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
         letters.add({
           "char": "อักษร $i",
           "image": "assets/png/character/char_$i.png",
-          "audio": "assets/audio/character/char_$i.m4a",
+          "audio": "assets/audio/character/Char_$i.m4a",
         });
       }
     } else if (widget.gameType == "vowel") {
