@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../../services/firestore_service.dart';
 
+
 class SurahDetailScreen extends StatefulWidget {
   final String title;
   final int ayahCount;
