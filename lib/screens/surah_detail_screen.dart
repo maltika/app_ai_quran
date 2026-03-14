@@ -3,9 +3,9 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import '../../services/firestore_service.dart';
+import '../services/firestore_service.dart';
+import '../services/model_service.dart';
 
 class SurahDetailScreen extends StatefulWidget {
   final String title;
@@ -37,8 +37,13 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   String? recordedFilePath;
   String? webRecordedData; // For web platform
 
-  int correctCount = 0;
-  int wrongCount = 0;
+  // ระบบประเมินผล 3 ระดับ
+  int excellentCount = 0;
+  int goodCount = 0;
+  int tryCount = 0;
+
+  // AI Analysis
+  bool isAnalyzing = false;
 
   // เพิ่มตัวแปรสำหรับเก็บ XP
   int _currentXp = 0;
@@ -112,85 +117,146 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   Future<void> _startRecording() async {
     try {
       if (await _audioRecorder.hasPermission()) {
-        String fileName = 'recording_${widget.title}_ayah$currentAyah.wav';
-        
-        if (kIsWeb) {
-          // For web platform
-          await _audioRecorder.start(const RecordConfig(), path: fileName);
-        } else {
-          // For mobile platforms
-          final Directory appDocumentsDir = await getApplicationDocumentsDirectory();
-          final String filePath = '${appDocumentsDir.path}/$fileName';
-          
-          await _audioRecorder.start(
-            const RecordConfig(
-              encoder: AudioEncoder.wav,
-              bitRate: 128000,
-              sampleRate: 44100,
-            ),
-            path: filePath,
-          );
-          
-          setState(() {
-            recordedFilePath = filePath;
-          });
-        }
+        // 1. ใช้ Temporary Directory แทน (Emulator Windows จะเสถียรกว่า)
+        final Directory tempDir = await getTemporaryDirectory();
+        final String filePath = '${tempDir.path}/temp_record.wav';
+
+        // 2. ลบไฟล์เก่าออกก่อนถ้ามีอยู่
+        final file = File(filePath);
+        if (file.existsSync()) await file.delete();
+
+        // 3. เริ่มอัดเสียง (เช็คสเปกให้ตรงโมเดล)
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.wav, // บังคับเป็น WAV
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+          path: filePath,
+        );
+
+        print("🎙️ กำลังบันทึกไปที่: $filePath");
 
         setState(() {
+          recordedFilePath = filePath;
           isRecording = true;
           hasRecorded = false;
         });
-        
         _pulseController.repeat(reverse: true);
       }
     } catch (e) {
-      debugPrint('Error starting recording: $e');
-      setState(() {
-        message = "❌ ไม่สามารถบันทึกเสียงได้";
-      });
+      print("❌ อัดเสียงไม่สำเร็จ: $e");
+      setState(() => message = "❌ ไม่สามารถบันทึกเสียงได้");
     }
   }
 
   Future<void> _stopRecording() async {
     try {
       final String? path = await _audioRecorder.stop();
-      
       _pulseController.stop();
       _pulseController.reset();
-      
+
       if (path != null) {
-        if (kIsWeb) {
-          setState(() {
-            webRecordedData = path;
-            hasRecorded = true;
-            isRecording = false;
-          });
-        } else {
-          setState(() {
-            recordedFilePath = path;
-            hasRecorded = true;
-            isRecording = false;
-          });
-        }
-        
+        // เช็คว่าไฟล์มีขนาดจริงไหม (ถ้า 0 bytes แสดงว่าไมค์ Emulator ไม่ทำงาน)
+        final file = File(path);
+        final int size = await file.length();
+        print("✅ บันทึกเสร็จแล้ว! ขนาดไฟล์: $size bytes");
+
         setState(() {
-          message = "✅ บันทึกเสียงเรียบร้อย!";
+          recordedFilePath = path;
+          hasRecorded = size > 0;
+          isRecording = false;
+          message = size > 0
+              ? "✅ บันทึกเสียงเรียบร้อย!"
+              : "⚠️ เสียงเบาเกินไปหรือไมค์ไม่ติด";
         });
       }
     } catch (e) {
-      debugPrint('Error stopping recording: $e');
-      setState(() {
-        message = "❌ เกิดข้อผิดพลาดในการบันทึก";
-        isRecording = false;
-      });
-      _pulseController.stop();
+      print("❌ หยุดบันทึกไม่สำเร็จ: $e");
     }
   }
+  // Future<void> _startRecording() async {
+  //   try {
+  //     if (await _audioRecorder.hasPermission()) {
+  //       String fileName = 'recording_${widget.title}_ayah$currentAyah.wav';
+
+  //       if (kIsWeb) {
+  //         // For web platform
+  //         await _audioRecorder.start(const RecordConfig(), path: fileName);
+  //       } else {
+  //         // For mobile platforms
+  //         final Directory appDocumentsDir = await getTemporaryDirectory();
+  //         final String filePath = '${appDocumentsDir.path}/$fileName';
+
+  //         await _audioRecorder.start(
+  //           const RecordConfig(
+  //             encoder: AudioEncoder.wav,
+  //             numChannels: 1,
+  //             sampleRate: 16000,
+  //           ),
+  //           path: filePath,
+  //         );
+
+  //         setState(() {
+  //           recordedFilePath = filePath;
+  //         });
+  //       }
+
+  //       setState(() {
+  //         isRecording = true;
+  //         hasRecorded = false;
+  //       });
+
+  //       _pulseController.repeat(reverse: true);
+  //     }
+  //   } catch (e) {
+  //     debugPrint('Error starting recording: $e');
+  //     setState(() {
+  //       message = "❌ ไม่สามารถบันทึกเสียงได้";
+  //     });
+  //   }
+  // }
+
+  // Future<void> _stopRecording() async {
+  //   try {
+  //     final String? path = await _audioRecorder.stop();
+
+  //     _pulseController.stop();
+  //     _pulseController.reset();
+
+  //     if (path != null) {
+  //       if (kIsWeb) {
+  //         setState(() {
+  //           webRecordedData = path;
+  //           hasRecorded = true;
+  //           isRecording = false;
+  //         });
+  //       } else {
+  //         setState(() {
+  //           recordedFilePath = path;
+  //           hasRecorded = true;
+  //           isRecording = false;
+  //         });
+  //       }
+
+  //       setState(() {
+  //         message = "✅ บันทึกเสียงเรียบร้อย!";
+  //       });
+  //     }
+  //   } catch (e) {
+  //     debugPrint('Error stopping recording: $e');
+  //     setState(() {
+  //       message = "❌ เกิดข้อผิดพลาดในการบันทึก";
+  //       isRecording = false;
+  //     });
+  //     _pulseController.stop();
+  //   }
+  // }
 
   Future<void> _playRecordedAudio() async {
     try {
       await _audioPlayer.stop();
-      
+
       if (kIsWeb && webRecordedData != null) {
         // For web platform - play from memory
         await _audioPlayer.play(UrlSource(webRecordedData!));
@@ -206,26 +272,62 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
     }
   }
 
-  // แก้ไข _checkAnswer ให้เก็บ XP แต่ไม่บันทึก Firestore ทันที
-  void _checkAnswer(bool correct) async {
+  /// วิเคราะห์เสียงด้วย AI
+  Future<void> _analyzeWithAI() async {
+    setState(() => isAnalyzing = true);
+    try {
+      final result = await ModelService.instance.predict(recordedFilePath!);
+      final level = result['level'] as String;
+      final confidence = (result['confidence'] as double) * 100;
+
+      _checkAnswer(level, confidence.toStringAsFixed(1));
+    } catch (e, stackTrace) {
+      debugPrint('❌ AI Error: $e');
+      debugPrint('❌ Stack: $stackTrace');
+      setState(() {
+        message = "❌ Error: $e";
+      });
+    } finally {
+      setState(() => isAnalyzing = false);
+    }
+  }
+
+  /// ตรวจสอบคำตอบและให้คะแนน (3 ระดับ)
+  void _checkAnswer(String level, String confidence) async {
     await _audioPlayer.stop();
 
-    if (correct) {
-      setState(() {
-        message = "✅ ถูกต้อง!";
-        correctCount++;
-        showNextButton = true;
-        _currentXp += 10; // เพิ่ม XP แต่ไม่บันทึกลง Firestore ก่อน
-      });
-    } else {
-      setState(() {
-        message = "❌ ผิด!";
-        wrongCount++;
-        showNextButton = true;
-        _currentXp += 5; // ให้ XP น้อยกว่าเมื่อตอบผิด
-      });
-    }
+    setState(() {
+      // ✅ handle silent and unclear - ไม่นับคะแนน ไม่ไปหน้าต่อไป
+      if (level == 'silent') {
+        showNextButton = false;
+        message = "🔇 ไม่ได้ยินเสียง กรุณาลองบันทึกใหม่อีกครั้ง";
+        return;
+      }
 
+      if (level == 'unclear') {
+        showNextButton = false;
+        message = "🎤 เสียงไม่ชัดเจน ลองอ่านให้ดังขึ้นแล้วลองใหม่";
+        return;
+      }
+
+      showNextButton = true;
+      switch (level) {
+        case 'excellent':
+          excellentCount++;
+          _currentXp += 10;
+          message = "🌟 เก่งมาก! (ความมั่นใจ $confidence%)";
+          break;
+        case 'good':
+          goodCount++;
+          _currentXp += 5;
+          message = "👍 พอใช้! (ความมั่นใจ $confidence%)";
+          break;
+        default: // 'try'
+          tryCount++;
+          _currentXp += 2;
+          message = "💪 พยายามเข้า! (ความมั่นใจ $confidence%)";
+      }
+    });
     _slideController.forward();
   }
 
@@ -244,7 +346,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
         recordedFilePath = null;
         webRecordedData = null;
       });
-      
+
       _slideController.reset();
       await _playAyah();
     } else {
@@ -256,18 +358,10 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
 
   // ฟังก์ชันสำหรับกำหนดเงื่อนไขการให้คะแนนตามซูเราะห์
   String _getResultText() {
-    String surahTitle = widget.title.toLowerCase();
-    
-    if (surahTitle == "al-fatiha") {
-      // อัลฟาติหะ: ผิดได้ไม่เกิน 3 ครั้ง
-      return wrongCount <= 3 ? "✅ ดีเยี่ยม" : "💪 พยายาม";
-    } else if (surahTitle == "al-ikhlas") {
-      // อิคลาส: ผิดได้ไม่เกิน 2 ครั้ง
-      return wrongCount <= 2 ? "✅ ดีเยี่ยม" : "💪 พยายาม";
-    } else {
-      // ซูเราะห์อื่น ๆ: ใช้เงื่อนไขเดิม (ไม่ผิดเลย)
-      return wrongCount == 0 ? "✅ ดีเยี่ยม" : "💪 พยายาม";
-    }
+    int total = excellentCount + goodCount + tryCount;
+    if (total == 0) return "💪 พยายาม";
+    double excellentPercent = excellentCount / total;
+    return excellentPercent >= 0.7 ? "✅ ดีเยี่ยม" : "💪 พยายาม";
   }
 
   // เพิ่มฟังก์ชันสำหรับบันทึก XP เมื่อจบซูเราะห์
@@ -295,44 +389,49 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
     }
 
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning, color: Colors.orange, size: 28),
-            SizedBox(width: 10),
-            Text("ยืนยันการออก", style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          "คุณต้องการออกจากการฝึกหรือไม่?\nข้อมูลการฝึกจะไม่ถูกบันทึก",
-          style: TextStyle(fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("ยกเลิก", style: TextStyle(fontSize: 16)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          context: context,
+          builder: (context) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange, size: 28),
+                SizedBox(width: 10),
+                Text("ยืนยันการออก",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
             ),
-            child: const Text("ออก", style: TextStyle(fontSize: 16)),
+            content: const Text(
+              "คุณต้องการออกจากการฝึกหรือไม่?\nข้อมูลการฝึกจะไม่ถูกบันทึก",
+              style: TextStyle(fontSize: 16),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text("ยกเลิก", style: TextStyle(fontSize: 16)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text("ออก", style: TextStyle(fontSize: 16)),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
   }
 
   void _showSummaryDialog() {
     String resultText = _getResultText(); // ใช้ฟังก์ชันเดียวกัน
     Color resultColor = resultText.contains("✅") ? Colors.green : Colors.orange;
-    IconData resultIcon = resultText.contains("✅") ? Icons.celebration : Icons.fitness_center;
-    
+    IconData resultIcon =
+        resultText.contains("✅") ? Icons.celebration : Icons.fitness_center;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -342,9 +441,9 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: resultText.contains("✅") 
-                ? [Colors.green, Colors.green.shade700]
-                : [Colors.orange, Colors.deepOrange],
+              colors: resultText.contains("✅")
+                  ? [Colors.green, Colors.green.shade700]
+                  : [Colors.orange, Colors.deepOrange],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -357,7 +456,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               const SizedBox(width: 10),
               const Text(
                 "สรุปผลการฝึก",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -396,14 +496,17 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              _buildResultRow("✅ อ่านถูก", correctCount, Colors.green),
+              _buildResultRow("🌟 เก่งมาก", excellentCount, Colors.green),
               const SizedBox(height: 10),
-              _buildResultRow("❌ อ่านผิด", wrongCount, Colors.red),
+              _buildResultRow("👍 พอใช้", goodCount, Colors.orange),
+              const SizedBox(height: 10),
+              _buildResultRow("💪 พยายามเข้า", tryCount, Colors.red),
               const SizedBox(height: 15),
               const Divider(),
               Text(
                 "รวมทั้งหมด: ${widget.ayahCount} อายะห์",
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
               // แสดงเงื่อนไขการให้คะแนน
@@ -467,14 +570,16 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               Navigator.pop(context);
               setState(() {
                 currentAyah = 1;
-                correctCount = 0;
-                wrongCount = 0;
+                excellentCount = 0;
+                goodCount = 0;
+                tryCount = 0;
                 message = "";
                 hasPlayed = false;
                 showNextButton = false;
                 started = false;
                 hasRecorded = false;
                 isRecording = false;
+                isAnalyzing = false;
                 recordedFilePath = null;
                 webRecordedData = null;
                 _currentXp = 0; // รีเซ็ต XP
@@ -486,7 +591,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text("ฝึกใหม่", style: TextStyle(fontSize: 16)),
           ),
@@ -498,7 +604,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   // ฟังก์ชันแสดงข้อมูลเงื่อนไขการให้คะแนน
   String _getScoringInfo() {
     String surahTitle = widget.title.toLowerCase();
-    
+
     if (surahTitle == "al-fatiha") {
       return "เงื่อนไข: ผิดได้ไม่เกิน 3 ครั้ง = ดีเยี่ยม";
     } else if (surahTitle == "al-ikhlas") {
@@ -534,7 +640,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   }
 
   Widget _buildGradientButton({
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required String text,
     required IconData icon,
     required List<Color> colors,
@@ -558,13 +664,17 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
         icon: Icon(icon, color: Colors.white),
         label: Text(
           text,
-          style: TextStyle(fontSize: fontSize, color: Colors.white, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              fontSize: fontSize,
+              color: Colors.white,
+              fontWeight: FontWeight.w600),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           minimumSize: minimumSize,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         ),
       ),
     );
@@ -607,7 +717,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               children: [
                 // Custom App Bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       IconButton(
@@ -616,7 +727,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                             Navigator.pop(context);
                           }
                         },
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                        icon: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 28),
                       ),
                       Expanded(
                         child: Text(
@@ -633,7 +745,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                     ],
                   ),
                 ),
-                
+
                 // Progress Section - Updated to match MinigameScreen style
                 if (started) // Only show progress when started
                   Container(
@@ -673,13 +785,14 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                             value: progress,
                             minHeight: 8,
                             backgroundColor: Colors.white.withOpacity(0.3),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.white),
                           ),
                         ),
                       ],
                     ),
                   ),
-                
+
                 // Main Content
                 Expanded(
                   child: Container(
@@ -806,9 +919,11 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
+                            Icon(Icons.image_not_supported,
+                                size: 40, color: Colors.grey),
                             SizedBox(height: 8),
-                            Text("ไม่พบรูปภาพ", style: TextStyle(color: Colors.grey)),
+                            Text("ไม่พบรูปภาพ",
+                                style: TextStyle(color: Colors.grey)),
                           ],
                         ),
                       ),
@@ -863,7 +978,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                   ],
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Recording Button with Animation
                 AnimatedBuilder(
                   animation: _pulseAnimation,
@@ -871,22 +986,24 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                     return Transform.scale(
                       scale: isRecording ? _pulseAnimation.value : 1.0,
                       child: _buildGradientButton(
-                        onPressed: isRecording ? _stopRecording : _startRecording,
+                        onPressed:
+                            isRecording ? _stopRecording : _startRecording,
                         text: isRecording ? "หยุดบันทึก" : "เริ่มบันทึก",
                         icon: isRecording ? Icons.stop : Icons.mic,
-                        colors: isRecording 
-                          ? [Colors.red, Colors.redAccent] 
-                          : [Colors.orange, Colors.deepOrange],
+                        colors: isRecording
+                            ? [Colors.red, Colors.redAccent]
+                            : [Colors.orange, Colors.deepOrange],
                         fontSize: 16,
                       ),
                     );
                   },
                 ),
-                
+
                 if (isRecording) ...[
                   const SizedBox(height: 15),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -895,11 +1012,13 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
+                        Icon(Icons.fiber_manual_record,
+                            color: Colors.red, size: 16),
                         SizedBox(width: 8),
                         Text(
                           "กำลังบันทึก...",
-                          style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              color: Colors.red, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -920,30 +1039,18 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           ),
           const SizedBox(height: 30),
 
-          // Answer Buttons
+          // AI Analysis Button (แทนปุ่มอ่านถูก/ผิด)
           if (!showNextButton) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _buildGradientButton(
-                    onPressed: () => _checkAnswer(true),
-                    text: "อ่านถูก",
-                    icon: Icons.check_circle,
-                    colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
-                    minimumSize: const Size(0, 50),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: _buildGradientButton(
-                    onPressed: () => _checkAnswer(false),
-                    text: "อ่านผิด",
-                    icon: Icons.cancel,
-                    colors: const [Colors.red, Colors.redAccent],
-                    minimumSize: const Size(0, 50),
-                  ),
-                ),
-              ],
+            _buildGradientButton(
+              onPressed: (isAnalyzing || isRecording || !hasRecorded)
+                  ? null
+                  : _analyzeWithAI,
+              text: isAnalyzing ? "กำลังวิเคราะห์..." : "ประเมินด้วย AI",
+              icon: isAnalyzing ? Icons.hourglass_top : Icons.psychology,
+              colors: isAnalyzing
+                  ? [Colors.grey, Colors.grey]
+                  : [const Color(0xFF1565C0), const Color(0xFF0D47A1)],
+              minimumSize: const Size(220, 55),
             ),
           ],
 
@@ -954,7 +1061,9 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               child: _buildGradientButton(
                 onPressed: _goToNextAyah,
                 text: currentAyah >= widget.ayahCount ? "ดูผลลัพธ์" : "ถัดไป",
-                icon: currentAyah >= widget.ayahCount ? Icons.assessment : Icons.arrow_forward,
+                icon: currentAyah >= widget.ayahCount
+                    ? Icons.assessment
+                    : Icons.arrow_forward,
                 colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
                 fontSize: 18,
                 minimumSize: const Size(200, 50),
@@ -969,14 +1078,14 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
-                color: message.contains("✅") 
-                  ? Colors.green.withOpacity(0.1) 
-                  : Colors.red.withOpacity(0.1),
+                color: message.contains("✅")
+                    ? Colors.green.withOpacity(0.1)
+                    : Colors.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: message.contains("✅") 
-                    ? Colors.green.withOpacity(0.3) 
-                    : Colors.red.withOpacity(0.3),
+                  color: message.contains("✅")
+                      ? Colors.green.withOpacity(0.3)
+                      : Colors.red.withOpacity(0.3),
                 ),
               ),
               child: Text(
@@ -984,7 +1093,9 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: message.contains("✅") ? Colors.green[700] : Colors.red[700],
+                  color: message.contains("✅")
+                      ? Colors.green[700]
+                      : Colors.red[700],
                 ),
                 textAlign: TextAlign.center,
               ),

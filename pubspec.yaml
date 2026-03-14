@@ -46,9 +46,13 @@ dependencies:
   
   # AI รอโมเดลจากเพื่อน
   # tflite_flutter: ^0.10.4
+  onnxruntime: ^1.4.1
   
   # File Management
   path_provider: ^2.1.1
+  
+  # PyTorch Mobile
+  pytorch_lite: ^4.2.8
 
 dev_dependencies:
   flutter_test:
@@ -86,8 +90,9 @@ flutter:
     - assets/png/character/
     - assets/png/vowels/
     - assets/png/surah/
-    # โมเดล AI (รอเพื่อนส่งมา)
-    - assets/models/
+    - assets/models/quran_recitation_model_mobile.pt
+    - assets/models/quran_recitation_model.onnx
+    - assets/models/quran_model_v9.onnx
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
