@@ -50,9 +50,7 @@ dependencies:
   
   # File Management
   path_provider: ^2.1.1
-  
-  # PyTorch Mobile
-  pytorch_lite: ^4.2.8
+
 
 dev_dependencies:
   flutter_test:
