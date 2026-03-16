@@ -49,6 +49,17 @@ android {
         pickFirst 'lib/x86/libonnxruntime.so'
         pickFirst 'lib/arm64-v8a/libonnxruntime.so'
         pickFirst 'lib/armeabi-v7a/libonnxruntime.so'
+
+        resources {
+            pickFirst 'com/google/common/base/VerifyException.class'
+            pickFirst 'com/google/common/base/Optional.class'
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/NOTICE',
+                'META-INF/*.kotlin_module'
+            ]
+        }
     }
 }
 

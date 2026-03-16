@@ -16,3 +16,19 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+subprojects {
+    project.configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.google.guava') {
+                // บังคับใช้เวอร์ชันเดียวกับเครื่องคุณที่รันผ่าน
+                if (details.requested.name == 'guava') {
+                    details.useVersion '33.4.0-android'
+                }
+                if (details.requested.name == 'listenablefuture') {
+                    details.useVersion '9999.0-empty-to-avoid-conflict-with-guava'
+                }
+            }
+        }
+    }
+}
