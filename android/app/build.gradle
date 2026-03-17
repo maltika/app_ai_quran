@@ -52,13 +52,20 @@ android {
         pickFirst 'lib/armeabi-v7a/libonnxruntime.so'
 
         resources {
-            pickFirst 'com/google/common/base/VerifyException.class'
+            // ดึงกลุ่ม pickFirst มาไว้ด้วยกัน
             pickFirst 'com/google/common/base/Optional.class'
+            pickFirst 'com/google/common/base/Predicate.class'
+            pickFirst 'com/google/common/base/Function.class'
+            pickFirst 'com/google/common/base/Supplier.class'
+            
+            // จับกลุ่ม exclude ทั้งหมดมาไว้ในลิสต์เดียว
             excludes += [
+                'com/google/common/base/VerifyException.class', // ย้ายมาไว้ตรงนี้
                 'META-INF/DEPENDENCIES',
                 'META-INF/LICENSE',
                 'META-INF/NOTICE',
-                'META-INF/*.kotlin_module'
+                'META-INF/*.kotlin_module',
+                '**/listenablefuture_google_prerelease.gwt.xml'
             ]
         }
     }
@@ -66,4 +73,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // บังคับใช้ Guava เวอร์ชันเดียวกับเครื่องคุณเป๊ะๆ
+    implementation "com.google.guava:guava:33.4.0-android"
+    implementation "com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"
 }

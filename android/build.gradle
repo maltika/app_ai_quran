@@ -1,8 +1,16 @@
 allprojects {
+    configurations.all {
+        resolutionStrategy {
+            // บังคับว่าถ้าเจอ Guava ให้ใช้เวอร์ชันนี้เท่านั้น ไม่ต้องเถียงกันทั้งโปรเจกต์
+            force 'com.google.guava:guava:33.4.0-android'
+            force 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
+        }
+    }
     repositories {
         google()
         mavenCentral()
     }
+
 }
 
 rootProject.buildDir = "../build"
