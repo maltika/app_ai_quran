@@ -14,7 +14,7 @@ class ModelService {
   // ─── config ตรงกับตอน train ───────────────────────────────────────────────
   static const int sampleRate = 16000;
   static const int nMfcc = 40;
-  static const int fftSize = 512;
+  static const int fftSize = 400;
   static const int hopLength = 160;
   static const int targetFrames = 300;
   static const int numClasses = 3; // ✅ fixed: model has 3 classes
@@ -273,17 +273,19 @@ class ModelService {
 
   // ─── DCT Type-II ──────────────────────────────────────────────────────────
   List<double> _dct(List<double> input) {
-    final int n = input.length;
-    final List<double> out = List.filled(nMfcc, 0.0);
-    for (int k = 0; k < nMfcc; k++) {
-      double sum = 0;
-      for (int i = 0; i < n; i++) {
-        sum += input[i] * math.cos(math.pi * k * (i + 0.5) / n);
-      }
-      out[k] = sum;
+  final int n = input.length;
+  final List<double> out = List.filled(nMfcc, 0.0);
+  for (int k = 0; k < nMfcc; k++) {
+    double sum = 0;
+    for (int i = 0; i < n; i++) {
+      sum += input[i] * math.cos(math.pi * k * (i + 0.5) / n);
     }
-    return out;
+    // ✅ เพิ่มแค่บรรทัดนี้
+    final double scale = (k == 0) ? math.sqrt(1.0 / n) : math.sqrt(2.0 / n);
+    out[k] = sum * scale;
   }
+  return out;
+}
 
   // ─── Flatten [300, 40] → Float32List [12000] ─────────────────────────────
   Float32List _flattenMfcc(List<List<double>> mfcc) {
@@ -321,7 +323,7 @@ class ModelService {
 
   // ─── ระดับความมั่นใจ ──────────────────────────────────────────────────────
   String _getLevel(double confidence) {
-    if (confidence >= 0.99) return 'excellent'; // 🌟 เก่งมาก
+    if (confidence >= 0.95) return 'excellent'; // 🌟 เก่งมาก
     if (confidence >= 0.65) return 'good'; // 👍 พอใช้
     return 'try'; // 💪 พยายามเข้า
   }

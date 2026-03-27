@@ -235,12 +235,14 @@ class _MinigameScreenState extends State<MinigameScreen> {
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(
             children: [
               Icon(Icons.warning, color: Colors.orange, size: 28),
               SizedBox(width: 10),
-              Text("ยืนยันการออก", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text("ยืนยันการออก",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           content: const Text(
@@ -262,7 +264,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
               child: const Text("ออก", style: TextStyle(fontSize: 16)),
             ),
@@ -276,7 +279,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
 
   String _getLevelName() {
     if (widget.gameType == "alphabet") return "ตัวอักษร Level $level";
-    return "Vowels$level";
+    return "สระ Level $level";
   }
 
   Widget _buildGradientButton({
@@ -303,13 +306,17 @@ class _MinigameScreenState extends State<MinigameScreen> {
         icon: Icon(icon, color: Colors.white),
         label: Text(
           text,
-          style: TextStyle(fontSize: fontSize, color: Colors.white, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              fontSize: fontSize,
+              color: Colors.white,
+              fontWeight: FontWeight.w600),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         ),
       ),
     );
@@ -339,7 +346,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
               children: [
                 // Custom App Bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       IconButton(
@@ -348,24 +356,50 @@ class _MinigameScreenState extends State<MinigameScreen> {
                             Navigator.pop(context);
                           }
                         },
-                        icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                        icon: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 28),
                       ),
                       Expanded(
                         child: Text(
                           _getLevelName(),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 24,
+                            fontSize: 22, // ปรับลงนิดนึงเพื่อให้พอดีกับก้อน XP
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(width: 48), // Balance the back button
+
+                      // --- แก้ไขตรงนี้: เปลี่ยนจาก SizedBox เป็นก้อน XP ---
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star,
+                                color: Colors.yellow, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              "$_currentXp XP", // ตัวแปรสะสม XP ในหน้ามินิเกม
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // -------------------------------------------
                     ],
                   ),
                 ),
-                
                 // Progress Section
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -406,7 +440,9 @@ class _MinigameScreenState extends State<MinigameScreen> {
                           value: reviewingWrong
                               ? (_wrongQuestions.isEmpty
                                   ? 1.0
-                                  : 1 - (_wrongQuestions.length / maxWrongQuestions))
+                                  : 1 -
+                                      (_wrongQuestions.length /
+                                          maxWrongQuestions))
                               : questionCount / totalQuestions,
                           minHeight: 8,
                           backgroundColor: Colors.white.withOpacity(0.3),
@@ -418,7 +454,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                     ],
                   ),
                 ),
-                
+
                 // Main Content
                 Expanded(
                   child: Container(
@@ -443,7 +479,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                                    colors: [
+                                      Color(0xFF4CAF50),
+                                      Color(0xFF388E3C)
+                                    ],
                                   ),
                                   shape: BoxShape.circle,
                                   boxShadow: [
@@ -460,7 +499,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                   child: IconButton(
                                     icon: const Icon(Icons.volume_up,
                                         size: 50, color: Colors.white),
-                                    onPressed: () => _playSound(correctLetter["audio"]!),
+                                    onPressed: () =>
+                                        _playSound(correctLetter["audio"]!),
                                   ),
                                 ),
                               ),
@@ -479,24 +519,27 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                 return AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
                                   decoration: BoxDecoration(
-                                    gradient: isSelected 
-                                      ? const LinearGradient(
-                                          colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
-                                        )
-                                      : null,
+                                    gradient: isSelected
+                                        ? const LinearGradient(
+                                            colors: [
+                                              Color(0xFF4CAF50),
+                                              Color(0xFF388E3C)
+                                            ],
+                                          )
+                                        : null,
                                     color: isSelected ? null : Colors.white,
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: isSelected 
-                                        ? Colors.green 
-                                        : Colors.grey.withOpacity(0.3),
+                                      color: isSelected
+                                          ? Colors.green
+                                          : Colors.grey.withOpacity(0.3),
                                       width: 2,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: isSelected 
-                                          ? Colors.green.withOpacity(0.3)
-                                          : Colors.grey.withOpacity(0.1),
+                                        color: isSelected
+                                            ? Colors.green.withOpacity(0.3)
+                                            : Colors.grey.withOpacity(0.1),
                                         blurRadius: isSelected ? 10 : 5,
                                         offset: const Offset(0, 3),
                                       ),
@@ -515,7 +558,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                       child: Padding(
                                         padding: const EdgeInsets.all(12),
                                         child: Image.asset(
-                                          opt["image"]!, 
+                                          opt["image"]!,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
@@ -530,7 +573,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
                             // Feedback Message
                             if (message.isNotEmpty)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 15),
                                 decoration: BoxDecoration(
                                   color: feedbackColor.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(15),
@@ -557,7 +601,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                 onPressed: () => _checkAnswer(selectedOption!),
                                 text: "ยืนยัน",
                                 icon: Icons.check,
-                                colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                                colors: const [
+                                  Color(0xFF4CAF50),
+                                  Color(0xFF388E3C)
+                                ],
                               ),
 
                             if (answered && !levelCompleted)
@@ -565,7 +612,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                 onPressed: _nextStep,
                                 text: "ข้อต่อไป",
                                 icon: Icons.arrow_forward,
-                                colors: const [Color(0xFF2196F3), Color(0xFF1976D2)],
+                                colors: const [
+                                  Color(0xFF2196F3),
+                                  Color(0xFF1976D2)
+                                ],
                               ),
 
                             if (levelCompleted)
@@ -573,7 +623,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                 onPressed: () => Navigator.pop(context),
                                 text: "กลับไปเลือกด่าน",
                                 icon: Icons.home,
-                                colors: const [Color(0xFF4CAF50), Color(0xFF388E3C)],
+                                colors: const [
+                                  Color(0xFF4CAF50),
+                                  Color(0xFF388E3C)
+                                ],
                               ),
 
                             const SizedBox(height: 30),
