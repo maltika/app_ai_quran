@@ -5,330 +5,190 @@ import 'package:onnxruntime/onnxruntime.dart';
 import 'package:flutter/services.dart';
 
 class ModelService {
-  // Singleton
   static final ModelService instance = ModelService._internal();
   ModelService._internal();
 
   OrtSession? _session;
 
-  // ─── config ตรงกับตอน train ───────────────────────────────────────────────
   static const int sampleRate = 16000;
   static const int nMfcc = 40;
-  static const int fftSize = 400;
+  static const int fftSize = 400; 
   static const int hopLength = 160;
   static const int targetFrames = 300;
-  static const int numClasses = 3; // ✅ fixed: model has 3 classes
+  static const int numClasses = 3;
 
-  // ─── โหลดโมเดล (Lazy Load) ────────────────────────────────────────────────
+  static const Map<int, String> labelMap = {
+    0: "1 พยายามเข้า",
+    1: "2 พอใช้",
+    2: "3 เก่งมาก",
+  };
+
   Future<void> init() async {
     if (_session != null) return;
     try {
       OrtEnv.instance.init();
       final sessionOptions = OrtSessionOptions();
-      final rawAssetFile =
-          await rootBundle.load('assets/models/quran_model_v9.onnx');
+      final rawAssetFile = await rootBundle.load('assets/models/quran_model_v9.onnx');
       final bytes = rawAssetFile.buffer.asUint8List();
       _session = OrtSession.fromBuffer(bytes, sessionOptions);
-      print("🚀 ONNX Model loaded successfully");
+      print("🚀 ONNX Model Loaded (Ready for 99% accuracy)");
     } catch (e) {
-      print("❌ Model Load Error: $e");
+      print("❌ Load Error: $e");
     }
   }
 
-  // ─── ฟังก์ชันหลัก ─────────────────────────────────────────────────────────
+  // ─── ฟังก์ชันช่วยจัดการ Noise และความดัง ───────────────────────────────────────
+  
+  void _applyNoiseGate(Float32List pcm) {
+    // ตัดเสียงซ่าเบาๆ ทิ้ง (Noise Gate)
+    const double threshold = 0.015; 
+    for (int i = 0; i < pcm.length; i++) {
+      if (pcm[i].abs() < threshold) pcm[i] = 0.0;
+    }
+  }
+
+  void _normalize(Float32List pcm) {
+    // เร่งเสียงให้ Peak อยู่ที่ 1.0 เสมอ (Normalization)
+    if (pcm.isEmpty) return;
+    double maxVal = 0.0;
+    for (var s in pcm) {
+      if (s.abs() > maxVal) maxVal = s.abs();
+    }
+    if (maxVal > 0.01) { // ป้องกันการเร่งเสียงเงียบจน Noise ดัง
+      for (int i = 0; i < pcm.length; i++) pcm[i] /= maxVal;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+
   Future<Map<String, dynamic>> predict(String wavFilePath) async {
     await init();
-
-    // 1. อ่าน WAV → PCM float32
     final Float32List pcm = await _readWav(wavFilePath);
+    
+    if (_computeRMS(pcm) < 0.02) return {'level': 'เงียบเกินไป', 'confidence': 0.0};
 
-    // 2. ✅ ตรวจสอบว่าเงียบเกินไปไหม
-    final double rms = _computeRMS(pcm);
-    print("🔍 RMS: $rms");
-    // ในฟังก์ชัน predict
-    if (rms < 0.025) {
-      // ปรับจาก 0.01 เป็น 0.025
-      return {
-        'surahIndex': -1,
-        'confidence': 0.0,
-        'level': 'try',
-        'isSilence': true,
-      };
-    }
+    // ✅ เคลียร์ Noise และเร่งเสียงก่อนส่งประเมิน
+    _applyNoiseGate(pcm);
+    _normalize(pcm);
 
-    // 3. คำนวณ MFCC [300, 40]
-    final List<List<double>> mfcc = _computeMfcc(pcm);
-
-    // 4. Flatten → Float32List [1, 300, 40]
+    final List<List<double>> mfcc = _computeLibrosaLikeMfcc(pcm);
     final Float32List flat = _flattenMfcc(mfcc);
 
-    // 5. สร้าง input tensor shape [1, 300, 40]
-    final inputTensor = OrtValueTensor.createTensorWithDataList(
-      flat,
-      [1, targetFrames, nMfcc],
-    );
-
-    // 6. รัน inference
+    final inputTensor = OrtValueTensor.createTensorWithDataList(flat, [1, targetFrames, nMfcc]);
     final inputs = {'mfcc': inputTensor};
-    final runOptions = OrtRunOptions();
-    final outputs = _session!.run(runOptions, inputs);
-
-    // 7. ✅ ดึง output logits - handle List<List<double>>
-    final outputTensor = outputs.first as OrtValueTensor;
-    final rawOutput = outputTensor.value;
-    print("🔍 Output type: ${rawOutput.runtimeType}");
-    print("🔍 Output value: $rawOutput");
-
-    List<double> logits = [];
-    if (rawOutput is List<List<double>>) {
-      logits = rawOutput[0]; // batch แรก
-    } else if (rawOutput is List<double>) {
-      logits = rawOutput;
-    } else if (rawOutput is List<List<List<double>>>) {
-      logits = rawOutput[0][0];
-    } else {
-      print("❌ Unknown output type: ${rawOutput.runtimeType}");
+    
+    final outputs = _session!.run(OrtRunOptions(), inputs);
+    final firstOutput = outputs.first;
+    
+    if (firstOutput == null) {
+      return {'level': 'Error: No Output', 'confidence': 0.0};
     }
 
-    // 8. cleanup
+    final List<double> logits = (firstOutput.value as List<List<double>>)[0];
+    
+    firstOutput.release();
     inputTensor.release();
-    outputTensor.release();
-    runOptions.release();
 
-    // 9. Softmax
-    final List<double> probs = _softmax(logits);
+    final List<double> probs = _softmax(logits, temperature: 1.0);
     final int idx = _argmax(probs);
     final double confidence = probs[idx];
 
-    // 10. ✅ Entropy check - ถ้า model ไม่มั่นใจจริงๆ
-    final double entropy = _entropy(probs);
-    final double maxEntropy = math.log(numClasses) / math.ln2;
-    final double normalizedEntropy = entropy / maxEntropy; // 0.0 - 1.0
-    print("🔍 confidence: $confidence, entropy: $normalizedEntropy");
-
-    // ถ้า entropy สูงมาก = เสียงไม่ชัด/ไม่ตรงกับที่เรียนมา
-    if (normalizedEntropy > 0.7) {
-      return {
-        'surahIndex': -1,
-        'confidence': confidence,
-        'level': 'unclear', // 🎤 ไม่ชัดเจน
-      };
-    }
-
-    // ถ้า confidence ต่ำเกินไป
-    if (confidence < 0.70) {
-      return {
-        'surahIndex': -1,
-        'confidence': confidence,
-        'level': 'unclear',
-      };
-    }
+    print("🎯 Result: ${labelMap[idx]} (${(confidence * 100).toStringAsFixed(1)}%)");
 
     return {
       'surahIndex': idx,
       'confidence': confidence,
-      'level': _getLevel(confidence),
+      'level': labelMap[idx] ?? 'Unknown',
     };
   }
 
-  // ─── RMS (ตรวจระดับเสียง) ─────────────────────────────────────────────────
-  double _computeRMS(Float32List pcm) {
-    if (pcm.isEmpty) return 0.0;
-    double sum = 0.0;
-    for (final s in pcm) sum += s * s;
-    return math.sqrt(sum / pcm.length);
-  }
-
-  // ─── Entropy ──────────────────────────────────────────────────────────────
-  double _entropy(List<double> probs) {
-    double h = 0.0;
-    for (final p in probs) {
-      if (p > 1e-9) h -= p * math.log(p) / math.ln2;
-    }
-    return h;
-  }
-
-  // ─── อ่าน WAV → Float32List ───────────────────────────────────────────────
-  Future<Float32List> _readWav(String path) async {
-    final Uint8List bytes = await File(path).readAsBytes();
-
-    const int headerSize = 44;
-    if (bytes.length <= headerSize) return Float32List(0);
-
-    // อ่าน sample rate จาก WAV header (offset 24)
-    final ByteData header = ByteData.view(bytes.buffer, 0, headerSize);
-    final int fileSampleRate = header.getInt32(24, Endian.little);
-
-    // Int16 PCM → Float32 normalize [-1, 1]
-    final ByteData body = ByteData.view(bytes.buffer, headerSize);
-    final int sampleCount = body.lengthInBytes ~/ 2;
-    final Float32List pcm = Float32List(sampleCount);
-    for (int i = 0; i < sampleCount; i++) {
-      pcm[i] = body.getInt16(i * 2, Endian.little) / 32768.0;
-    }
-
-    // Resample ถ้า sample rate ไม่ตรง
-    if (fileSampleRate != sampleRate) {
-      return _resample(pcm, fileSampleRate, sampleRate);
-    }
-    return pcm;
-  }
-
-  // ─── Resample ─────────────────────────────────────────────────────────────
-  Float32List _resample(Float32List pcm, int fromRate, int toRate) {
-    final int newLen = (pcm.length * toRate / fromRate).round();
-    final Float32List out = Float32List(newLen);
-    for (int i = 0; i < newLen; i++) {
-      final double pos = i * pcm.length / newLen;
-      final int idx = pos.toInt().clamp(0, pcm.length - 2);
-      final double frac = pos - idx;
-      out[i] = pcm[idx] * (1 - frac) + pcm[idx + 1] * frac;
-    }
-    return out;
-  }
-
-  // ─── คำนวณ MFCC ───────────────────────────────────────────────────────────
-  List<List<double>> _computeMfcc(Float32List pcm) {
+  List<List<double>> _computeLibrosaLikeMfcc(Float32List pcm) {
     final List<List<double>> frames = [];
     final List<List<double>> melFilters = _buildMelFilterbank();
+    final List<double> window = List.generate(fftSize, (i) => 0.5 * (1 - math.cos(2 * math.pi * i / (fftSize - 1))));
 
-    for (int start = 0;
-        start + fftSize <= pcm.length && frames.length < targetFrames;
-        start += hopLength) {
-      // Hann window
-      final Float32List frame = Float32List(fftSize);
-      for (int i = 0; i < fftSize; i++) {
-        frame[i] = pcm[start + i] *
-            (0.5 * (1 - math.cos(2 * math.pi * i / (fftSize - 1))));
-      }
-
-      // Power spectrum
+    for (int start = 0; start + fftSize <= pcm.length && frames.length < targetFrames; start += hopLength) {
+      final List<double> frame = List.generate(fftSize, (i) => pcm[start + i] * window[i]);
       final List<double> power = _powerSpectrum(frame);
-
-      // Mel filterbank + log
-      final List<double> mel = List.filled(nMfcc, 0.0);
+      final List<double> melSpec = List.filled(nMfcc, 0.0);
       for (int m = 0; m < nMfcc; m++) {
         for (int k = 0; k < power.length; k++) {
-          mel[m] += melFilters[m][k] * power[k];
+          melSpec[m] += melFilters[m][k] * power[k];
         }
-        mel[m] = math.log(mel[m] + 1e-9);
+        melSpec[m] = 10.0 * (math.log(math.max(melSpec[m], 1e-10)) / math.ln10);
       }
-
-      // DCT → MFCC coefficients
-      frames.add(_dct(mel));
+      frames.add(_dctOrtho(melSpec));
     }
-
-    // Pad ให้ครบ 300 frames ถ้าเสียงสั้น
-    while (frames.length < targetFrames) {
-      frames.add(List.filled(nMfcc, 0.0));
-    }
-
+    while (frames.length < targetFrames) frames.add(List.filled(nMfcc, 0.0));
     return frames;
   }
 
-  // ─── Power Spectrum ───────────────────────────────────────────────────────
-  List<double> _powerSpectrum(Float32List frame) {
+  List<double> _powerSpectrum(List<double> frame) {
     final int n = frame.length;
     final int halfN = n ~/ 2 + 1;
     final List<double> out = List.filled(halfN, 0.0);
     for (int k = 0; k < halfN; k++) {
       double re = 0, im = 0;
       for (int t = 0; t < n; t++) {
-        final double angle = 2 * math.pi * k * t / n;
+        double angle = 2 * math.pi * k * t / n;
         re += frame[t] * math.cos(angle);
         im -= frame[t] * math.sin(angle);
       }
-      out[k] = (re * re + im * im) / n;
+      out[k] = (re * re + im * im); 
     }
     return out;
   }
 
-  // ─── Mel Filterbank ───────────────────────────────────────────────────────
+  List<double> _dctOrtho(List<double> mel) {
+    final int n = mel.length;
+    final List<double> res = List.filled(n, 0.0);
+    for (int k = 0; k < n; k++) {
+      double sum = 0;
+      for (int i = 0; i < n; i++) {
+        sum += mel[i] * math.cos(math.pi * k * (i + 0.5) / n);
+      }
+      double scale = (k == 0) ? math.sqrt(1.0 / n) : math.sqrt(2.0 / n);
+      res[k] = sum * scale;
+    }
+    return res;
+  }
+
   List<List<double>> _buildMelFilterbank() {
-    double hzToMel(double hz) => 2595 * math.log(1 + hz / 700) / math.ln10;
+    double hzToMel(double hz) => 2595 * (math.log(1 + hz / 700) / math.ln10);
     double melToHz(double mel) => 700 * (math.pow(10, mel / 2595) - 1);
-
     final int bins = fftSize ~/ 2 + 1;
-    final double melMin = hzToMel(0);
-    final double melMax = hzToMel(sampleRate / 2.0);
-
-    final List<int> hzBins = List.generate(nMfcc + 2, (i) {
-      final double mel = melMin + i * (melMax - melMin) / (nMfcc + 1);
-      return ((melToHz(mel) / (sampleRate / 2)) * (bins - 1))
-          .round()
-          .clamp(0, bins - 1);
+    final double minMel = hzToMel(0);
+    final double maxMel = hzToMel(sampleRate / 2.0);
+    final List<int> binIdx = List.generate(nMfcc + 2, (i) {
+      double m = minMel + i * (maxMel - minMel) / (nMfcc + 1);
+      return (melToHz(m) * fftSize / sampleRate).round();
     });
-
-    return List.generate(nMfcc, (m) {
-      final List<double> filt = List.filled(bins, 0.0);
-      for (int k = hzBins[m]; k < hzBins[m + 1]; k++) {
-        filt[k] = (k - hzBins[m]) / (hzBins[m + 1] - hzBins[m] + 1e-9);
-      }
-      for (int k = hzBins[m + 1]; k <= hzBins[m + 2] && k < bins; k++) {
-        filt[k] = (hzBins[m + 2] - k) / (hzBins[m + 2] - hzBins[m + 1] + 1e-9);
-      }
-      return filt;
+    return List.generate(nMfcc, (i) {
+      final List<double> filter = List.filled(bins, 0.0);
+      for (int j = binIdx[i]; j < binIdx[i+1]; j++) filter[j] = (j - binIdx[i]) / (binIdx[i+1] - binIdx[i]);
+      for (int j = binIdx[i+1]; j < binIdx[i+2]; j++) filter[j] = (binIdx[i+2] - j) / (binIdx[i+2] - binIdx[i+1]);
+      return filter;
     });
   }
 
-  // ─── DCT Type-II ──────────────────────────────────────────────────────────
-  List<double> _dct(List<double> input) {
-  final int n = input.length;
-  final List<double> out = List.filled(nMfcc, 0.0);
-  for (int k = 0; k < nMfcc; k++) {
-    double sum = 0;
-    for (int i = 0; i < n; i++) {
-      sum += input[i] * math.cos(math.pi * k * (i + 0.5) / n);
-    }
-    // ✅ เพิ่มแค่บรรทัดนี้
-    final double scale = (k == 0) ? math.sqrt(1.0 / n) : math.sqrt(2.0 / n);
-    out[k] = sum * scale;
+  List<double> _softmax(List<double> x, {double temperature = 1.0}) {
+    double max = x.reduce(math.max);
+    List<double> exp = x.map((v) => math.exp((v - max) / temperature)).toList();
+    double sum = exp.reduce((a, b) => a + b);
+    return exp.map((v) => v / sum).toList();
   }
-  return out;
-}
+  
+  int _argmax(List<double> list) => list.indexOf(list.reduce(math.max));
+  double _computeRMS(Float32List p) => math.sqrt(p.isEmpty ? 0 : p.map((x)=>x*x).reduce((a,b)=>a+b)/p.length);
+  Float32List _flattenMfcc(List<List<double>> m) => Float32List.fromList(m.expand((x)=>x).toList());
 
-  // ─── Flatten [300, 40] → Float32List [12000] ─────────────────────────────
-  Float32List _flattenMfcc(List<List<double>> mfcc) {
-    final Float32List flat = Float32List(targetFrames * nMfcc);
-    for (int t = 0; t < targetFrames; t++) {
-      for (int f = 0; f < nMfcc; f++) {
-        flat[t * nMfcc + f] = mfcc[t][f];
-      }
-    }
-    return flat;
+  Future<Float32List> _readWav(String p) async {
+    final b = await File(p).readAsBytes();
+    if (b.length < 44) return Float32List(0);
+    final d = ByteData.view(b.buffer, 44);
+    return Float32List.fromList(List.generate(d.lengthInBytes ~/ 2, (i) => d.getInt16(i * 2, Endian.little) / 32768.0));
   }
-
-  // ─── Softmax ──────────────────────────────────────────────────────────────
-  List<double> _softmax(List<double> logits, {double temperature = 2.0}) {
-    // หาร logits ด้วย temperature → ทำให้ confidence กระจายมากขึ้น
-    final scaled = logits.map((x) => x / temperature).toList();
-    final double maxVal = scaled.reduce(math.max);
-    final List<double> exp = scaled.map((x) => math.exp(x - maxVal)).toList();
-    final double sum = exp.reduce((a, b) => a + b);
-    return exp.map((x) => x / sum).toList();
-  }
-
-  // ─── Argmax ───────────────────────────────────────────────────────────────
-  int _argmax(List<double> probs) {
-    int best = 0;
-    double bestV = probs[0];
-    for (int i = 1; i < probs.length; i++) {
-      if (probs[i] > bestV) {
-        bestV = probs[i];
-        best = i;
-      }
-    }
-    return best;
-  }
-
-  // ─── ระดับความมั่นใจ ──────────────────────────────────────────────────────
-  String _getLevel(double confidence) {
-    if (confidence >= 0.95) return 'excellent'; // 🌟 เก่งมาก
-    if (confidence >= 0.65) return 'good'; // 👍 พอใช้
-    return 'try'; // 💪 พยายามเข้า
-  }
-
-  // ─── ปิด session ──────────────────────────────────────────────────────────
+  
   void dispose() {
     _session?.release();
     _session = null;

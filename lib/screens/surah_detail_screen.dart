@@ -198,45 +198,50 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   }
 
   /// ตรวจสอบคำตอบและให้คะแนน
+  /// ตรวจสอบคำตอบและให้คะแนน (แก้ไขให้ตรงกับ Label ใหม่)
   void _checkAnswer(String level) async {
     await _audioPlayer.stop();
 
     setState(() {
-      // 🔴 unclear/silent → บังคับบันทึกใหม่ (ล้าง hasRecorded ด้วย)
-      if (level == 'silent' || level == 'isSilence') {
+      // ดักจับกรณีเสียงเงียบหรือไม่ชัด (เหมือนเดิม)
+      if (level == 'silent' ||
+          level == 'isSilence' ||
+          level.contains("เงียบ")) {
         showNextButton = false;
         hasRecorded = false;
-        recordedFilePath = null;
-        recordMessage = "";
-        message = "🔇 ไม่ได้ยินเสียง กรุณาลองบันทึกใหม่อีกครั้ง";
+        message = "🔇 ไม่ได้ยินเสียง กรุณาลองใหม่";
         return;
       }
 
-      if (level == 'unclear') {
+      if (level.contains("ไม่ชัดเจน")) {
         showNextButton = false;
         hasRecorded = false;
-        recordedFilePath = null;
-        recordMessage = "";
-        message = "🎤 เสียงไม่ชัดเจน ลองอ่านให้ดังขึ้นแล้วลองใหม่";
+        message = "🎤 เสียงไม่ชัดเจน ลองใหม่อีกครั้ง";
         return;
       }
 
       showNextButton = true;
+
+      // 🎯 แก้ตรงนี้ให้ตรงกับ labelMap ใน ModelService
       switch (level) {
-        case 'excellent':
+        case '3 เก่งมาก':
           excellentCount++;
           _currentXp += 10;
           message = "🌟 เก่งมาก!";
           break;
-        case 'good':
+        case '2 พอใช้':
           goodCount++;
           _currentXp += 5;
           message = "👍 พอใช้!";
           break;
-        default:
+        case '1 พยายามเข้า':
           tryCount++;
           _currentXp += 2;
           message = "💪 พยายามเข้า!";
+          break;
+        default:
+          // กรณีอื่นๆ ให้แสดงตามที่โมเดลส่งมาตรงๆ เลย
+          message = level;
       }
     });
     _slideController.forward();
@@ -339,9 +344,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
         : resultText.contains("👍")
             ? Colors.orange
             : Colors.deepOrange;
-    IconData resultIcon = resultText.contains("✅")
-        ? Icons.celebration
-        : Icons.fitness_center;
+    IconData resultIcon =
+        resultText.contains("✅") ? Icons.celebration : Icons.fitness_center;
 
     showDialog(
       context: context,
@@ -954,9 +958,10 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           // 🟡 disable ถ้ายังไม่เคยฟังอายะห์เลย
           if (!showNextButton) ...[
             _buildGradientButton(
-              onPressed: (isAnalyzing || isRecording || !hasRecorded || !hasPlayed)
-                  ? null
-                  : _analyzeWithAI,
+              onPressed:
+                  (isAnalyzing || isRecording || !hasRecorded || !hasPlayed)
+                      ? null
+                      : _analyzeWithAI,
               text: isAnalyzing
                   ? "กำลังวิเคราะห์..."
                   : !hasPlayed
@@ -980,8 +985,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               position: _slideAnimation,
               child: _buildGradientButton(
                 onPressed: _goToNextAyah,
-                text:
-                    currentAyah >= widget.ayahCount ? "ดูผลลัพธ์" : "ถัดไป",
+                text: currentAyah >= widget.ayahCount ? "ดูผลลัพธ์" : "ถัดไป",
                 icon: currentAyah >= widget.ayahCount
                     ? Icons.assessment
                     : Icons.arrow_forward,
@@ -997,8 +1001,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           // ผลประเมิน AI
           if (message.isNotEmpty) ...[
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
                 color: message.contains("🌟") || message.contains("👍")
                     ? Colors.green.withOpacity(0.1)
