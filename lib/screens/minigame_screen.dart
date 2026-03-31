@@ -4,7 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../services/firestore_service.dart';
 
 class MinigameScreen extends StatefulWidget {
-  final String gameType; // "alphabet" หรือ "vowel"
+  final String gameType; // "letter" หรือ "vowel"
   final int startLevel; // ด่านย่อยที่เริ่ม
   const MinigameScreen(
       {super.key, required this.gameType, this.startLevel = 1});
@@ -50,13 +50,14 @@ class _MinigameScreenState extends State<MinigameScreen> {
   void initState() {
     super.initState();
     level = widget.startLevel;
+    FirestoreService().ensureUserExists();
     _initLetters();
     _generateQuestion();
   }
 
   void _initLetters() {
     letters = [];
-    if (widget.gameType == "alphabet") {
+    if (widget.gameType == "letter") {
       int start = 1, end = 10;
       if (level == 1) {
         start = 1;
@@ -215,17 +216,18 @@ class _MinigameScreenState extends State<MinigameScreen> {
 
     // กำหนดชื่อด่านใหญ่
     String levelName = "";
-    if (widget.gameType == "alphabet")
+    if (widget.gameType == "letter")
       levelName = "หมู่บ้านอักษร";
     else if (widget.gameType == "vowel") levelName = "โอเอซิสแห่งสระ";
     // เพิ่มกรณีอื่น ๆ ของด่านใหญ่อีกได้
 
-    await FirestoreService().addXpOnce(
-      _currentXp,
+    // เปลี่ยน addXpOnce(...) เป็น
+    await FirestoreService().savePracticeResult(
+      gameType: widget.gameType,
       sublevel: level,
-      resultText: resultText,
-      levelName: levelName,
-      gameType: widget.gameType, // ส่ง gameType เข้าไป
+      itemPlayed: "${widget.gameType} level $level",
+      isCorrect: true,
+      xpGained: _currentXp,
     );
   }
 
@@ -278,7 +280,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
   }
 
   String _getLevelName() {
-    if (widget.gameType == "alphabet") return "ตัวอักษร Level $level";
+    if (widget.gameType == "letter") return "ตัวอักษร Level $level";
     return "สระ Level $level";
   }
 

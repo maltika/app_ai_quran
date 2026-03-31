@@ -3,73 +3,56 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final String? uid = FirebaseAuth.instance.currentUser?.uid;
+  String? get uid => FirebaseAuth.instance.currentUser?.uid;
 
-  /// สำหรับการบันทึกผลปกติ
-  Future<void> savePracticeResult(String type, String result,
-      {int sublevel = 1}) async {
-    if (uid == null) return;
-
-    final xp = result == "✅ ดีเยี่ยม" ? 10 : 0;
-    final userRef = _db.collection("users").doc(uid);
-
-    final doc = await userRef.get();
-    if (!doc.exists) {
-      await userRef.set({
-        "totalXp": 0,
-        "unlockedSublevel": 1,
-      });
-    }
-
-    await userRef.collection("practice_logs").add({
-      "type": type,
-      "result": result,
-      "xpGained": xp,
-      "sublevel": sublevel,
-      "timestamp": FieldValue.serverTimestamp(),
-    });
-
+  Future<void> ensureUserExists() async {
+  if (uid == null) return;
+  final userRef = _db.collection("users").doc(uid);
+  final doc = await userRef.get();
+  if (!doc.exists) {
     await userRef.set({
-      "totalXp": FieldValue.increment(xp),
-      "unlockedSublevel": FieldValue.increment(result == "✅ ดีเยี่ยม" ? 1 : 0),
-    }, SetOptions(merge: true));
+      "totalXp": 0,
+      "unlockedSublevels": {
+        "letter": 1,
+        "vowel": 1,
+      },
+    });
   }
+}
+
+  Future<void> savePracticeResult({
+  required String gameType,
+  required int sublevel,
+  required String itemPlayed,
+  required bool isCorrect,
+  required int xpGained,
+  double? aiScore,
+  String? aiFeedback,
+}) async {
+  if (uid == null) return;
+
+  await ensureUserExists();
+  final userRef = _db.collection("users").doc(uid);
+
+  await userRef.collection("practice_logs").add({
+    "gameType": gameType,
+    "sublevel": sublevel,
+    "itemPlayed": itemPlayed,
+    "isCorrect": isCorrect,
+    "xpGained": xpGained,
+    "timestamp": FieldValue.serverTimestamp(),
+    if (aiScore != null) "aiScore": aiScore,
+    if (aiFeedback != null) "aiFeedback": aiFeedback,
+  });
+
+  await userRef.update({
+    "totalXp": FieldValue.increment(xpGained),
+    if (isCorrect)
+      "unlockedSublevels.$gameType": FieldValue.increment(1),
+  });
+}
 
   
-  /// สำหรับบันทึก XP แบบรวมทั้งด่าน
-  Future<void> addXpOnce(
-    int gainedXp, {
-    int sublevel = 1,
-    String resultText = "✅ ดีเยี่ยม",
-    String levelName = "Unknown Level", // ส่งชื่อด่านใหญ่เข้ามา
-    String gameType = "", // เพิ่ม type เกม เช่น "alphabet" หรือ "vowel"
-  }) async {
-    if (uid == null || gainedXp <= 0) return;
-
-    final userRef = _db.collection("users").doc(uid);
-
-    final doc = await userRef.get();
-    if (!doc.exists) {
-      await userRef.set({
-        "totalXp": 0,
-        "unlockedSublevel": 1,
-      });
-    }
-
-    await userRef.collection("practice_logs").add({
-      "levelName": levelName, // ด่านใหญ่
-      "type": "$gameType level $sublevel", // <-- ✅ แก้ตรงนี้
-      "result": resultText, // ✅ ดีเยี่ยม หรือ 💪 พยายาม
-      "xpGained": gainedXp,
-      "sublevel": sublevel,
-      "timestamp": FieldValue.serverTimestamp(),
-    });
-
-    await userRef.set({
-      "totalXp": FieldValue.increment(gainedXp),
-      "unlockedSublevel": FieldValue.increment(1),
-    }, SetOptions(merge: true));
-  }
 
   Stream<DocumentSnapshot> getUserStream() {
     return _db.collection("users").doc(uid).snapshots();

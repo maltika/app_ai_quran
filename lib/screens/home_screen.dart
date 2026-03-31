@@ -12,7 +12,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stages = [
-      {"title": "หมู่บ้านอักษร", "type": "alphabet", "icon": Icons.text_fields, "color": const Color(0xFF4CAF50)},
+      {"title": "หมู่บ้านอักษร", "type": "letter", "icon": Icons.text_fields, "color": const Color(0xFF4CAF50)},
       {"title": "โอเอซิสแห่งสระ", "type": "vowel", "icon": Icons.music_note, "color": const Color(0xFF2196F3)},
       {"title": "นครแห่งอายะห์", "type": "surah", "icon": Icons.book, "color": const Color(0xFFFF9800)},
     ];
@@ -164,7 +164,7 @@ class HomeScreen extends StatelessWidget {
                                     MaterialPageRoute(
                                       builder: (_) => SublevelScreen(
                                         gameType: stage["type"] as String,
-                                        maxLevel: stage["type"] == "alphabet"
+                                        maxLevel: stage["type"] == "letter"
                                             ? 3
                                             : (stage["type"] == "vowel" ? 5 : 1),
                                       ),
@@ -283,7 +283,7 @@ class HomeScreen extends StatelessWidget {
 
   String _getStageDescription(String type) {
     switch (type) {
-      case "alphabet":
+      case "letter":
         return "เรียนรู้ตัวอักษรอาหรับพื้นฐาน";
       case "vowel":
         return "เรียนรู้สระพื้นฐาน";

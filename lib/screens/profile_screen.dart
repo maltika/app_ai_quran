@@ -13,7 +13,8 @@ class ProfileScreen extends StatelessWidget {
   List<Achievement> _calculateAchievements(Map<String, dynamic> userData, List<Map<String, dynamic>> historyData) {
     final totalXp = userData["totalXp"] ?? 0;
     final level = _calculateLevel(totalXp);
-    final excellentCount = historyData.where((h) => (h["result"] ?? "").contains("ดีเยี่ยม")).length;
+    final excellentCount = historyData.where((h) => (h["isCorrect"] ?? false) == true).length;
+
     final totalExercises = historyData.length;
     
     List<Achievement> achievements = [
@@ -474,7 +475,8 @@ class ProfileScreen extends StatelessWidget {
                                     itemCount: historySnapshot.data!.docs.length,
                                     itemBuilder: (context, index) {
                                       final data = historySnapshot.data!.docs[index].data() as Map<String, dynamic>;
-                                      final isExcellent = (data["result"] ?? "").contains("ดีเยี่ยม");
+                                      final aiFeedback = data["aiFeedback"] ?? "ยังไม่ผ่าน";
+                                      final isExcellent = aiFeedback.contains("✅") || aiFeedback.contains("👍");
                                       
                                       return Container(
                                         margin: const EdgeInsets.only(bottom: 12),
@@ -511,7 +513,7 @@ class ProfileScreen extends StatelessWidget {
                                             ),
                                           ),
                                           title: Text(
-                                            data["type"] ?? "-",
+                                            data["itemPlayed"] ?? "-",
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w600,
                                               fontSize: 16,
@@ -520,7 +522,7 @@ class ProfileScreen extends StatelessWidget {
                                           subtitle: Padding(
                                             padding: const EdgeInsets.only(top: 4),
                                             child: Text(
-                                              "ผล: ${data["result"] ?? "-"}",
+                                              "ผล: $aiFeedback",
                                               style: TextStyle(
                                                 color: Colors.grey[600],
                                                 fontSize: 14,

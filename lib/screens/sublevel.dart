@@ -159,7 +159,8 @@ class SublevelScreen extends StatelessWidget {
                       }
 
                       final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-                      final unlocked = data["unlockedSublevel"] ?? 1;
+                      final sublevels = data["unlockedSublevels"] as Map<String, dynamic>? ?? {};
+                      final unlocked = (sublevels[gameType] as int?) ?? 1;
 
                       return Padding(
                         padding: const EdgeInsets.all(20),

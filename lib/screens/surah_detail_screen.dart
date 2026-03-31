@@ -59,6 +59,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   @override
   void initState() {
     super.initState();
+    FirestoreService().ensureUserExists();
     _audioPlayer = AudioPlayer();
     _audioRecorder = AudioRecorder();
     _initializeRecorder();
@@ -277,24 +278,30 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
     int total = excellentCount + goodCount + tryCount;
     if (total == 0) return "💪 พยายาม";
 
-    double avgXp = _currentXp / total;
+    // นับสัดส่วนแทน avgXp
+    double goodRatio = (excellentCount + goodCount) / total;
 
-    if (avgXp >= 8) return "✅ ดีเยี่ยม";
-    if (avgXp >= 5) return "👍 พอใช้";
+    if (goodRatio >= 0.7) return "✅ ดีเยี่ยม";
+    if (goodRatio >= 0.4) return "👍 พอใช้";  // พอใช้ 2/4 = 50% → ได้พอใช้
     return "💪 พยายาม";
   }
 
   Future<void> _finishSurah() async {
-    setState(() => levelCompleted = true);
+  setState(() => levelCompleted = true);
 
-    await FirestoreService().addXpOnce(
-      _currentXp,
-      sublevel: 1,
-      resultText: _getResultText(),
-      levelName: "การอ่านซูเราะห์",
-      gameType: "surah",
-    );
-  }
+  final int total = excellentCount + goodCount + tryCount;
+  final double aiScore = total > 0 ? _currentXp / (total * 10) : 0.0;
+
+  await FirestoreService().savePracticeResult(
+    gameType: "surah",
+    sublevel: 1,
+    itemPlayed: widget.title,
+    isCorrect: _getResultText().contains("✅") || _getResultText().contains("👍"),
+    xpGained: _currentXp,
+    aiScore: aiScore,
+    aiFeedback: _getResultText(),
+  );
+}
 
   Future<bool> _showExitConfirmation() async {
     if (!started) return true;
