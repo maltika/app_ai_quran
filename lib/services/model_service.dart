@@ -75,7 +75,7 @@ class ModelService {
     final Float32List flat = _flattenMfcc(mfcc);
 
     final inputTensor = OrtValueTensor.createTensorWithDataList(flat, [1, targetFrames, nMfcc]);
-    final inputs = {'mfcc': inputTensor};
+    final inputs = {'input': inputTensor};
     
     final outputs = _session!.run(OrtRunOptions(), inputs);
     final firstOutput = outputs.first;
