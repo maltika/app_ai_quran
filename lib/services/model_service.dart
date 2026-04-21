@@ -38,7 +38,57 @@ class ModelService {
   }
 
   // ─── ฟังก์ชันช่วยจัดการ Noise และความดัง ───────────────────────────────────────
-  
+  /// Bandpass Filter (IIR Biquad) กรองเฉพาะช่วงเสียงพูด 80Hz–3400Hz
+/// ตัด: เสียงตื้ดดด (ต่ำกว่า 80Hz) และเสียงซ่าๆ (สูงกว่า 3400Hz)
+Float32List _applyBandpassFilter(Float32List pcm) {
+  const double sr = 16000.0;
+
+  // --- Highpass ที่ 80Hz (ตัดเสียงตื้ดดด) ---
+  final double hpW = 2 * math.pi * 80 / sr;
+  final double hpCos = math.cos(hpW);
+  final double hpAlpha = math.sin(hpW) / (2 * 0.707);
+  final double hpB0 = (1 + hpCos) / 2;
+  final double hpB1 = -(1 + hpCos);
+  final double hpB2 = (1 + hpCos) / 2;
+  final double hpA0 = 1 + hpAlpha;
+  final double hpA1 = -2 * hpCos;
+  final double hpA2 = 1 - hpAlpha;
+
+  // --- Lowpass ที่ 3400Hz (ตัดเสียงซ่าๆ) ---
+  final double lpW = 2 * math.pi * 3400 / sr;
+  final double lpCos = math.cos(lpW);
+  final double lpAlpha = math.sin(lpW) / (2 * 0.707);
+  final double lpB0 = (1 - lpCos) / 2;
+  final double lpB1 = 1 - lpCos;
+  final double lpB2 = (1 - lpCos) / 2;
+  final double lpA0 = 1 + lpAlpha;
+  final double lpA1 = -2 * lpCos;
+  final double lpA2 = 1 - lpAlpha;
+
+  final Float32List out = Float32List(pcm.length);
+
+  // Pass 1: Highpass
+  double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (int i = 0; i < pcm.length; i++) {
+    final double x0 = pcm[i];
+    final double y0 = (hpB0/hpA0)*x0 + (hpB1/hpA0)*x1 + (hpB2/hpA0)*x2
+                    - (hpA1/hpA0)*y1 - (hpA2/hpA0)*y2;
+    out[i] = y0.clamp(-1.0, 1.0);
+    x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+  }
+
+  // Pass 2: Lowpass (ต่อจาก Highpass)
+  x1 = 0; x2 = 0; y1 = 0; y2 = 0;
+  for (int i = 0; i < pcm.length; i++) {
+    final double x0 = out[i];
+    final double y0 = (lpB0/lpA0)*x0 + (lpB1/lpA0)*x1 + (lpB2/lpA0)*x2
+                    - (lpA1/lpA0)*y1 - (lpA2/lpA0)*y2;
+    out[i] = y0.clamp(-1.0, 1.0);
+    x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+  }
+
+  return out;
+}
   void _applyNoiseGate(Float32List pcm) {
     // ตัดเสียงซ่าเบาๆ ทิ้ง (Noise Gate)
     const double threshold = 0.015; 
@@ -63,11 +113,12 @@ class ModelService {
 
   Future<Map<String, dynamic>> predict(String wavFilePath) async {
     await init();
-    final Float32List pcm = await _readWav(wavFilePath);
+    Float32List pcm = await _readWav(wavFilePath);
     
     if (_computeRMS(pcm) < 0.02) return {'level': 'เงียบเกินไป', 'confidence': 0.0};
 
     // ✅ เคลียร์ Noise และเร่งเสียงก่อนส่งประเมิน
+    pcm = _applyBandpassFilter(pcm);
     _applyNoiseGate(pcm);
     _normalize(pcm);
 

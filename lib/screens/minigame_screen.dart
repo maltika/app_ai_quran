@@ -228,6 +228,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
       itemPlayed: "${widget.gameType} level $level",
       isCorrect: true,
       xpGained: _currentXp,
+      aiFeedback: "ผ่านด่านแล้ว",
     );
   }
 

@@ -12,7 +12,7 @@ class SublevelScreen extends StatelessWidget {
 
   String _getGameTitle() {
     switch (gameType) {
-      case 'alphabet':
+      case 'letter':
         return 'เรียนรู้ตัวอักษร';
       case 'vowel':
         return 'เรียนรู้สระ';
@@ -25,7 +25,7 @@ class SublevelScreen extends StatelessWidget {
 
   IconData _getGameIcon() {
     switch (gameType) {
-      case 'alphabet':
+      case 'letter':
         return Icons.text_fields;
       case 'vowel':
         return Icons.record_voice_over;
@@ -38,7 +38,7 @@ class SublevelScreen extends StatelessWidget {
 
   String _getLevelName(int sublevel) {
     switch (gameType) {
-      case 'alphabet':
+      case 'letter':
         if (sublevel == 1) return 'ตัวอักษร 1-10';
         if (sublevel == 2) return 'ตัวอักษร 11-20';
         if (sublevel == 3) return 'ตัวอักษร 21-29';

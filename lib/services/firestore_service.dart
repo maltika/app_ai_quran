@@ -14,7 +14,7 @@ class FirestoreService {
       "totalXp": 0,
       "unlockedSublevels": {
         "letter": 1,
-        "vowel": 1,
+        // "vowel": 1,
       },
     });
   }
@@ -47,9 +47,22 @@ class FirestoreService {
 
   await userRef.update({
     "totalXp": FieldValue.increment(xpGained),
-    if (isCorrect)
-      "unlockedSublevels.$gameType": FieldValue.increment(1),
   });
+
+  // unlock ด่านถัดไป เฉพาะตอนผ่านด่านนั้นจริงๆ
+  if (isCorrect) {
+    final doc = await userRef.get();
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    final sublevels = data["unlockedSublevels"] as Map<String, dynamic>? ?? {};
+    final currentUnlocked = (sublevels[gameType] as int?) ?? 1;
+
+    // unlock เฉพาะถ้าด่านที่เพิ่งเล่น >= ด่านที่ unlock ล่าสุด
+    if (sublevel >= currentUnlocked) {
+      await userRef.update({
+        "unlockedSublevels.$gameType": sublevel + 1,
+      });
+    }
+  }
 }
 
   
