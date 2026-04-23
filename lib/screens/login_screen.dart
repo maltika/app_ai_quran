@@ -13,20 +13,48 @@ class _LoginScreenState extends State<LoginScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   bool isLoading = false;
+  bool _isPasswordVisible = false;
 
-  void login() async {
+  // error messages
+  String? _emailError;
+  String? _passwordError;
+
+  bool _validate() {
+    String? emailErr;
+    String? passErr;
+
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (email.isEmpty) {
+      emailErr = "กรุณากรอกอีเมล";
+    } else if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,}$').hasMatch(email)) {
+      emailErr = "รูปแบบอีเมลไม่ถูกต้อง";
+    }
+
+    if (password.isEmpty) {
+      passErr = "กรุณากรอกรหัสผ่าน";
+    }
+
     setState(() {
-      isLoading = true;
+      _emailError = emailErr;
+      _passwordError = passErr;
     });
 
+    return emailErr == null && passErr == null;
+  }
+
+  void login() async {
+    if (!_validate()) return;
+
+    setState(() => isLoading = true);
+
     final success = await FirebaseAuthService().signIn(
-      emailController.text,
+      emailController.text.trim(),
       passwordController.text,
     );
 
-    setState(() {
-      isLoading = false;
-    });
+    setState(() => isLoading = false);
 
     if (success && mounted) {
       Navigator.pushReplacementNamed(context, "/home");
@@ -37,12 +65,13 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Icon(Icons.error, color: Colors.white),
               SizedBox(width: 10),
-              Text("❌ เข้าสู่ระบบล้มเหลว"),
+              Text("❌ อีเมลหรือรหัสผ่านไม่ถูกต้อง"),
             ],
           ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -72,16 +101,16 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: ElevatedButton.icon(
         onPressed: onPressed,
-        icon: isLoading 
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : Icon(icon, color: Colors.white),
+        icon: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Icon(icon, color: Colors.white),
         label: Text(
           text,
           style: const TextStyle(
@@ -93,7 +122,8 @@ class _LoginScreenState extends State<LoginScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         ),
       ),
     );
@@ -104,38 +134,87 @@ class _LoginScreenState extends State<LoginScreen> {
     required String label,
     required IconData icon,
     bool obscureText = false,
+    bool isPassword = false,
+    String? errorText,
+    TextInputType keyboardType = TextInputType.text,
+    TextInputAction textInputAction = TextInputAction.next,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: obscureText,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: const Color(0xFF4CAF50)),
-          labelStyle: TextStyle(color: Colors.grey[600]),
-          border: OutlineInputBorder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
+          child: TextField(
+            controller: controller,
+            obscureText: isPassword ? !_isPasswordVisible : obscureText,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            onChanged: (_) {
+              // ล้าง error เมื่อเริ่มพิมพ์
+              if (errorText != null) {
+                setState(() {
+                  if (isPassword) _passwordError = null;
+                  else _emailError = null;
+                });
+              }
+            },
+            decoration: InputDecoration(
+              labelText: label,
+              prefixIcon: Icon(icon, color: const Color(0xFF4CAF50)),
+              labelStyle: TextStyle(color: Colors.grey[600]),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: errorText != null
+                    ? const BorderSide(color: Colors.red, width: 1.5)
+                    : BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              suffixIcon: isPassword
+                  ? IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.green[600],
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    )
+                  : null,
+            ),
           ),
-          filled: true,
-          fillColor: Colors.white,
         ),
-      ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 6),
+            child: Text(
+              errorText,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
+      ],
     );
   }
 
@@ -148,8 +227,8 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF4CAF50), // สีเขียว
-              Color(0xFF81C784), // สีเขียวอ่อน
+              Color(0xFF4CAF50),
+              Color(0xFF81C784),
             ],
           ),
         ),
@@ -160,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 50),
-                
+
                 // App Icon & Logo
                 Container(
                   padding: const EdgeInsets.all(30),
@@ -182,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                
+
                 // App Title
                 const Text(
                   "Quran Recitation",
@@ -194,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
-                
+
                 // Subtitle
                 Text(
                   "เรียนรู้การอ่านอัลกุรอาน",
@@ -205,7 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 50),
-                
+
                 // Login Form Card
                 Container(
                   padding: const EdgeInsets.all(30),
@@ -240,24 +319,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 30),
-                      
+
                       // Email Field
                       _buildTextField(
                         controller: emailController,
                         label: "อีเมล",
                         icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        errorText: _emailError,
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // Password Field
                       _buildTextField(
                         controller: passwordController,
                         label: "รหัสผ่าน",
                         icon: Icons.lock_outline,
-                        obscureText: true,
+                        isPassword: true,
+                        textInputAction: TextInputAction.done,
+                        errorText: _passwordError,
                       ),
                       const SizedBox(height: 30),
-                      
+
                       // Login Button
                       _buildGradientButton(
                         onPressed: isLoading ? null : login,
@@ -266,7 +350,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         isLoading: isLoading,
                       ),
                       const SizedBox(height: 20),
-                      
+
                       // Register Link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,

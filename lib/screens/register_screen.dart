@@ -12,28 +12,68 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
+
+  // error messages
+  String? _emailError;
+  String? _passwordError;
+
+  bool _validate() {
+    String? emailErr;
+    String? passErr;
+
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (email.isEmpty) {
+      emailErr = "กรุณากรอกอีเมล";
+    } else if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,}$').hasMatch(email)) {
+      emailErr = "รูปแบบอีเมลไม่ถูกต้อง";
+    }
+
+    if (password.isEmpty) {
+      passErr = "กรุณากรอกรหัสผ่าน";
+    } else if (password.length < 6) {
+      passErr = "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร";
+    }
+
+    setState(() {
+      _emailError = emailErr;
+      _passwordError = passErr;
+    });
+
+    return emailErr == null && passErr == null;
+  }
 
   void register() async {
+    if (!_validate()) return;
+
+    setState(() => _isLoading = true);
+
     final success = await FirebaseAuthService().register(
-      emailController.text,
+      emailController.text.trim(),
       passwordController.text,
     );
+
+    setState(() => _isLoading = false);
+
     if (success && mounted) {
-      Navigator.pop(context); // กลับไปหน้า Login
+      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("❌ Register failed"),
+          content: const Text("❌ สมัครสมาชิกไม่สำเร็จ อีเมลนี้อาจถูกใช้แล้ว"),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
   }
 
   Widget _buildGradientButton({
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required String text,
     required IconData icon,
   }) {
@@ -55,7 +95,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       child: ElevatedButton.icon(
         onPressed: onPressed,
-        icon: Icon(icon, color: Colors.white),
+        icon: _isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : Icon(icon, color: Colors.white),
         label: Text(
           text,
           style: const TextStyle(
@@ -67,7 +116,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         ),
       ),
     );
@@ -79,53 +129,90 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required IconData prefixIcon,
     bool obscureText = false,
     bool isPassword = false,
+    String? errorText,
+    TextInputType keyboardType = TextInputType.text,
+    TextInputAction textInputAction = TextInputAction.next,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword ? !_isPasswordVisible : obscureText,
-        style: const TextStyle(fontSize: 16),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(color: Colors.green[700]),
-          prefixIcon: Icon(prefixIcon, color: Colors.green[600]),
-          suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                  color: Colors.green[600],
-                ),
-                onPressed: () {
-                  setState(() {
-                    _isPasswordVisible = !_isPasswordVisible;
-                  });
-                },
-              )
-            : null,
-          border: OutlineInputBorder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-          filled: true,
-          fillColor: Colors.white,
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
+          child: TextField(
+            controller: controller,
+            obscureText: isPassword ? !_isPasswordVisible : obscureText,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            style: const TextStyle(fontSize: 16),
+            onChanged: (_) {
+              // ล้าง error เมื่อเริ่มพิมพ์
+              if (errorText != null) {
+                setState(() {
+                  if (isPassword) _passwordError = null;
+                  else _emailError = null;
+                });
+              }
+            },
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: TextStyle(color: Colors.green[700]),
+              prefixIcon: Icon(prefixIcon, color: Colors.green[600]),
+              suffixIcon: isPassword
+                  ? IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.green[600],
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide:
+                    const BorderSide(color: Color(0xFF4CAF50), width: 2),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: errorText != null
+                    ? const BorderSide(color: Colors.red, width: 1.5)
+                    : BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            ),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         ),
-      ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 6),
+            child: Text(
+              errorText,
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
+      ],
     );
   }
 
@@ -138,22 +225,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF4CAF50), // สีเขียว
-              Color(0xFF81C784), // สีเขียวอ่อน
+              Color(0xFF4CAF50),
+              Color(0xFF81C784),
             ],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
-              // Custom App Bar
+              // Custom App Bar (เดิมทุกอย่าง)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                      icon: const Icon(Icons.arrow_back,
+                          color: Colors.white, size: 28),
                     ),
                     const Expanded(
                       child: Text(
@@ -166,12 +255,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(width: 48), // Balance the back button
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
-              
-              // Main Content
+
+              // Main Content (เดิมทุกอย่าง)
               Expanded(
                 child: Container(
                   margin: const EdgeInsets.only(top: 20),
@@ -189,33 +278,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 40),
-                          
-                          // Welcome Section
-                          Container(
-                            padding: const EdgeInsets.all(30),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.green.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
+
+                          // Welcome Section (เดิมทุกอย่าง)
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(30),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF4CAF50),
+                                    Color(0xFF388E3C)
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.person_add,
-                              size: 60,
-                              color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.green.withOpacity(0.3),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.person_add,
+                                size: 60,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 30),
-                          
+
                           const Text(
                             "สร้างบัญชีใหม่",
                             style: TextStyle(
@@ -235,33 +329,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 50),
-                          
+
                           // Email Field
                           _buildTextField(
                             controller: emailController,
                             label: "อีเมล",
                             prefixIcon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            errorText: _emailError,
                           ),
                           const SizedBox(height: 20),
-                          
+
                           // Password Field
                           _buildTextField(
                             controller: passwordController,
                             label: "รหัสผ่าน",
                             prefixIcon: Icons.lock_outlined,
                             isPassword: true,
+                            textInputAction: TextInputAction.done,
+                            errorText: _passwordError,
                           ),
                           const SizedBox(height: 40),
-                          
+
                           // Register Button
                           _buildGradientButton(
-                            onPressed: register,
-                            text: "สมัครสมาชิก",
+                            onPressed: _isLoading ? null : register,
+                            text: _isLoading ? "กำลังสมัคร..." : "สมัครสมาชิก",
                             icon: Icons.person_add,
                           ),
                           const SizedBox(height: 30),
-                          
-                          // Login Link
+
+                          // Login Link (เดิมทุกอย่าง)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
