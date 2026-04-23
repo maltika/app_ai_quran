@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../services/firestore_service.dart';
 
+// โหมดคำถาม
+enum QuestionMode { listenThenPick, lookThenListen }
+
 class MinigameScreen extends StatefulWidget {
   final String gameType; // "letter" หรือ "vowel"
   final int startLevel; // ด่านย่อยที่เริ่ม
@@ -21,6 +24,12 @@ class _MinigameScreenState extends State<MinigameScreen> {
   late List<Map<String, String>> options;
 
   Map<String, String>? selectedOption;
+
+  // โหมดคำถามในแต่ละข้อ
+  late QuestionMode _questionMode;
+
+  // ตัวเลือกเสียงที่กำลังเล่น (สำหรับโหมด lookThenListen)
+  Map<String, String>? _playingAudioOption;
 
   String message = "";
   Color feedbackColor = Colors.transparent;
@@ -107,7 +116,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
     if (sourceList.isEmpty) return;
 
     if (_recentQuestions.length >= sourceList.length) {
-      // ถ้าเลือกคำถามครบทั้งหมดแล้ว random ใหม่
       _recentQuestions.clear();
     }
 
@@ -129,13 +137,23 @@ class _MinigameScreenState extends State<MinigameScreen> {
     }
     options.shuffle();
 
+   bool allowMixedMode = widget.gameType == "vowel" && level >= 3;
+
+    _questionMode = allowMixedMode && random.nextBool()
+    ? QuestionMode.lookThenListen
+    : QuestionMode.listenThenPick;
+
     message = "";
     feedbackColor = Colors.transparent;
     selectedOption = null;
+    _playingAudioOption = null;
     answered = false;
     setState(() {});
 
-    _playSound(correctLetter["audio"]!);
+    // โหมดฟังเสียง → เปิดเสียงอัตโนมัติ
+    if (_questionMode == QuestionMode.listenThenPick) {
+      _playSound(correctLetter["audio"]!);
+    }
   }
 
   Future<void> _playSound(String path) async {
@@ -171,7 +189,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
     int xpThisQuestion = 0;
     if (selectedOption != null) {
       if (selectedOption!["char"] == correctLetter["char"]) {
-        // ถ้าอยู่รอบแก้คำตอบ → 8 XP / ข้อ, รอบปกติ → 10 XP / ข้อ
         xpThisQuestion = reviewingWrong ? 8 : 10;
       }
       _currentXp += xpThisQuestion;
@@ -182,9 +199,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
     if (!reviewingWrong &&
         questionCount >= totalQuestions &&
         _wrongQuestions.isNotEmpty) {
-      // เข้าโหมดแก้คำตอบ
       reviewingWrong = true;
-      maxWrongQuestions = _wrongQuestions.length; // เก็บจำนวนคำถามผิดเริ่มต้น
+      maxWrongQuestions = _wrongQuestions.length;
       questionCount = 0;
       _recentQuestions.clear();
       _generateQuestion();
@@ -192,13 +208,11 @@ class _MinigameScreenState extends State<MinigameScreen> {
     }
 
     if (!reviewingWrong && questionCount >= totalQuestions) {
-      // เล่นครบ 10 ข้อ + ไม่มีคำถามผิด
       _finishLevel();
       return;
     }
 
     if (reviewingWrong && _wrongQuestions.isEmpty) {
-      // แก้คำตอบผิดหมดแล้ว
       _finishLevel();
       return;
     }
@@ -212,16 +226,6 @@ class _MinigameScreenState extends State<MinigameScreen> {
       xp = _currentXp;
     });
 
-    String resultText = _wrongQuestions.isEmpty ? "✅ ดีเยี่ยม" : "💪 พยายาม";
-
-    // กำหนดชื่อด่านใหญ่
-    String levelName = "";
-    if (widget.gameType == "letter")
-      levelName = "หมู่บ้านอักษร";
-    else if (widget.gameType == "vowel") levelName = "โอเอซิสแห่งสระ";
-    // เพิ่มกรณีอื่น ๆ ของด่านใหญ่อีกได้
-
-    // เปลี่ยน addXpOnce(...) เป็น
     await FirestoreService().savePracticeResult(
       gameType: widget.gameType,
       sublevel: level,
@@ -325,11 +329,187 @@ class _MinigameScreenState extends State<MinigameScreen> {
     );
   }
 
+  // ── โหมด listenThenPick: ปุ่มลำโพงตรงกลาง (เดิม) ──
+  Widget _buildAudioButton() {
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+          ),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.green.withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: CircleAvatar(
+          radius: 50,
+          backgroundColor: Colors.transparent,
+          child: IconButton(
+            icon: const Icon(Icons.volume_up, size: 50, color: Colors.white),
+            onPressed: () => _playSound(correctLetter["audio"]!),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── โหมด lookThenListen: แสดงรูปตรงกลาง ──
+  Widget _buildImageDisplay() {
+    return Center(
+      child: Container(
+        width: 160,
+        height: 160,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.green.withOpacity(0.4),
+            width: 3,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.green.withOpacity(0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Image.asset(
+          correctLetter["image"]!,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
+  // ── ตัวเลือกแบบรูปภาพ (โหมด listenThenPick เดิม) ──
+  Widget _buildImageOption(Map<String, String> opt) {
+    bool isSelected = selectedOption == opt;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        gradient: isSelected
+            ? const LinearGradient(
+                colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+              )
+            : null,
+        color: isSelected ? null : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSelected ? Colors.green : Colors.grey.withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isSelected
+                ? Colors.green.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.1),
+            blurRadius: isSelected ? 10 : 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            _playSound(opt["audio"]!);
+            setState(() {
+              selectedOption = opt;
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Image.asset(
+              opt["image"]!,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── ตัวเลือกแบบปุ่มเสียง (โหมด lookThenListen ใหม่) ──
+  Widget _buildAudioOption(Map<String, String> opt) {
+    bool isSelected = selectedOption == opt;
+    bool isPlaying = _playingAudioOption == opt;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        gradient: isSelected
+            ? const LinearGradient(
+                colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
+              )
+            : null,
+        color: isSelected ? null : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isSelected ? Colors.green : Colors.grey.withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isSelected
+                ? Colors.green.withOpacity(0.3)
+                : Colors.grey.withOpacity(0.1),
+            blurRadius: isSelected ? 10 : 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () async {
+            // กดเพื่อเลือก + เล่นเสียง
+            setState(() {
+              selectedOption = opt;
+              _playingAudioOption = opt;
+            });
+            await _playSound(opt["audio"]!);
+            // หลังเสียงจบ reset สถานะ playing (optional)
+            if (mounted) {
+              setState(() {
+                _playingAudioOption = null;
+              });
+            }
+          },
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isPlaying ? Icons.volume_up : Icons.play_circle_fill,
+                size: 48,
+                color: isSelected ? Colors.white : const Color(0xFF4CAF50),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "กดฟังเสียง",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    double progress = (questionCount + (reviewingWrong ? totalQuestions : 0)) /
-        (totalQuestions + totalQuestions);
-
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
@@ -339,8 +519,8 @@ class _MinigameScreenState extends State<MinigameScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Color(0xFF4CAF50), // สีเขียว
-                Color(0xFF81C784), // สีเขียวอ่อน
+                Color(0xFF4CAF50),
+                Color(0xFF81C784),
               ],
             ),
           ),
@@ -367,14 +547,12 @@ class _MinigameScreenState extends State<MinigameScreen> {
                           _getLevelName(),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 22, // ปรับลงนิดนึงเพื่อให้พอดีกับก้อน XP
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
-
-                      // --- แก้ไขตรงนี้: เปลี่ยนจาก SizedBox เป็นก้อน XP ---
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
@@ -389,7 +567,7 @@ class _MinigameScreenState extends State<MinigameScreen> {
                                 color: Colors.yellow, size: 16),
                             const SizedBox(width: 4),
                             Text(
-                              "$_currentXp XP", // ตัวแปรสะสม XP ในหน้ามินิเกม
+                              "$_currentXp XP",
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -399,10 +577,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                           ],
                         ),
                       ),
-                      // -------------------------------------------
                     ],
                   ),
                 ),
+
                 // Progress Section
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -475,42 +653,70 @@ class _MinigameScreenState extends State<MinigameScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const SizedBox(height: 30),
+                            const SizedBox(height: 20),
 
-                            // Audio Button
+                            // ── Badge บอกโหมด ──
                             Center(
                               child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 6),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF4CAF50),
-                                      Color(0xFF388E3C)
-                                    ],
+                                  color: _questionMode ==
+                                          QuestionMode.listenThenPick
+                                      ? Colors.green.shade50
+                                      : Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _questionMode ==
+                                            QuestionMode.listenThenPick
+                                        ? Colors.green.shade200
+                                        : Colors.blue.shade200,
                                   ),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.green.withOpacity(0.3),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 10),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _questionMode ==
+                                              QuestionMode.listenThenPick
+                                          ? Icons.hearing
+                                          : Icons.image,
+                                      size: 16,
+                                      color: _questionMode ==
+                                              QuestionMode.listenThenPick
+                                          ? Colors.green.shade700
+                                          : Colors.blue.shade700,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _questionMode ==
+                                              QuestionMode.listenThenPick
+                                          ? "ฟังเสียง → เลือกภาพ"
+                                          : "ดูภาพ → เลือกเสียง",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _questionMode ==
+                                                QuestionMode.listenThenPick
+                                            ? Colors.green.shade700
+                                            : Colors.blue.shade700,
+                                      ),
                                     ),
                                   ],
                                 ),
-                                child: CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: Colors.transparent,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.volume_up,
-                                        size: 50, color: Colors.white),
-                                    onPressed: () =>
-                                        _playSound(correctLetter["audio"]!),
-                                  ),
-                                ),
                               ),
                             ),
-                            const SizedBox(height: 40),
 
-                            // Options Grid
+                            const SizedBox(height: 20),
+
+                            // ── ส่วนกลาง: ปุ่มเสียง หรือ รูปภาพ ──
+                            _questionMode == QuestionMode.listenThenPick
+                                ? _buildAudioButton()
+                                : _buildImageDisplay(),
+
+                            const SizedBox(height: 30),
+
+                            // ── ตัวเลือก 4 ช่อง ──
                             GridView.count(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -518,56 +724,10 @@ class _MinigameScreenState extends State<MinigameScreen> {
                               crossAxisSpacing: 15,
                               mainAxisSpacing: 15,
                               children: options.map((opt) {
-                                bool isSelected = selectedOption == opt;
-                                return AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  decoration: BoxDecoration(
-                                    gradient: isSelected
-                                        ? const LinearGradient(
-                                            colors: [
-                                              Color(0xFF4CAF50),
-                                              Color(0xFF388E3C)
-                                            ],
-                                          )
-                                        : null,
-                                    color: isSelected ? null : Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Colors.green
-                                          : Colors.grey.withOpacity(0.3),
-                                      width: 2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: isSelected
-                                            ? Colors.green.withOpacity(0.3)
-                                            : Colors.grey.withOpacity(0.1),
-                                        blurRadius: isSelected ? 10 : 5,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(20),
-                                      onTap: () {
-                                        _playSound(opt["audio"]!);
-                                        setState(() {
-                                          selectedOption = opt;
-                                        });
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Image.asset(
-                                          opt["image"]!,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
+                                return _questionMode ==
+                                        QuestionMode.listenThenPick
+                                    ? _buildImageOption(opt)
+                                    : _buildAudioOption(opt);
                               }).toList(),
                             ),
 
