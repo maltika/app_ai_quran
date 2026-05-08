@@ -225,20 +225,15 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
 
       // 🎯 แก้ตรงนี้ให้ตรงกับ labelMap ใน ModelService
       switch (level) {
-        case '3 เก่งมาก':
+        case 'ผ่าน':
           excellentCount++;
           _currentXp += 10;
-          message = "🌟 เก่งมาก!";
+          message = "🌟 ผ่าน";
           break;
-        case '2 พอใช้':
+        case 'ไม่ผ่าน':
           goodCount++;
-          _currentXp += 5;
-          message = "👍 พอใช้!";
-          break;
-        case '1 พยายามเข้า':
-          tryCount++;
           _currentXp += 2;
-          message = "💪 พยายามเข้า!";
+          message = "👍 ไม่ผ่าน";
           break;
         default:
           // กรณีอื่นๆ ให้แสดงตามที่โมเดลส่งมาตรงๆ เลย
@@ -417,12 +412,10 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              _buildResultRow("🌟 เก่งมาก", excellentCount, Colors.green),
+              _buildResultRow("🌟 ผ่าน", excellentCount, Colors.green),
               const SizedBox(height: 10),
-              _buildResultRow("👍 พอใช้", goodCount, Colors.orange),
+              _buildResultRow("👍 ไม่ผ่าน", goodCount, Colors.orange),
               const SizedBox(height: 10),
-              _buildResultRow("💪 พยายามเข้า", tryCount, Colors.red),
-              const SizedBox(height: 15),
               const Divider(),
               Text(
                 "รวมทั้งหมด: ${widget.ayahCount} อายะห์",

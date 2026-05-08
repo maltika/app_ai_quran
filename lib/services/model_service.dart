@@ -18,9 +18,8 @@ class ModelService {
   static const int numClasses = 3;
 
   static const Map<int, String> labelMap = {
-    0: "1 พยายามเข้า",
-    1: "2 พอใช้",
-    2: "3 เก่งมาก",
+    0: "ไม่ผ่าน",
+    1: "ผ่าน",
   };
 
   Future<void> init() async {
