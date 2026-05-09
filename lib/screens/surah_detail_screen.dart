@@ -25,7 +25,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
     with TickerProviderStateMixin {
   int currentAyah = 1;
   String message = "";
-  String recordMessage = ""; // 🔴 แยก message บันทึกเสียงออกจากผลประเมิน
+  String recordMessage = "";
   late AudioPlayer _audioPlayer;
   late AudioRecorder _audioRecorder;
   bool started = false;
@@ -38,16 +38,17 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   String? recordedFilePath;
   String? webRecordedData;
 
-  // ระบบประเมินผล 3 ระดับ
-  int excellentCount = 0;
-  int goodCount = 0;
-  int tryCount = 0;
+  // ✅ แก้: ใช้แค่ passCount กับ failCount
+  int passCount = 0;
+  int failCount = 0;
 
   // AI Analysis
   bool isAnalyzing = false;
 
-  // XP
+  // ✅ XP คำนวณจาก ayahCount แบบ dynamic
   int _currentXp = 0;
+  late int _xpPerPass;
+  late int _xpPerFail;
   bool levelCompleted = false;
 
   // Animation controllers
@@ -59,6 +60,10 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   @override
   void initState() {
     super.initState();
+    // ✅ คำนวณ XP ต่ออายะห์จาก ayahCount
+    _xpPerPass = (200 / widget.ayahCount).round();
+    _xpPerFail = (200 / widget.ayahCount * 0.2).round();
+
     FirestoreService().ensureUserExists();
     _audioPlayer = AudioPlayer();
     _audioRecorder = AudioRecorder();
@@ -132,7 +137,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           recordedFilePath = filePath;
           isRecording = true;
           hasRecorded = false;
-          recordMessage = ""; // 🔴 ล้าง record message
+          recordMessage = "";
         });
         _pulseController.repeat(reverse: true);
       }
@@ -155,7 +160,6 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           recordedFilePath = path;
           hasRecorded = size > 0;
           isRecording = false;
-          // 🔴 แสดงใน recordMessage แทน message
           recordMessage = size > 0
               ? "✅ บันทึกเสียงเรียบร้อย!"
               : "⚠️ เสียงเบาเกินไปหรือไมค์ไม่ติด";
@@ -179,7 +183,6 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
     }
   }
 
-  /// วิเคราะห์เสียงด้วย AI
   Future<void> _analyzeWithAI() async {
     setState(() => isAnalyzing = true);
     try {
@@ -187,24 +190,23 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
       final level = result['level'] as String;
       final confidence = (result['confidence'] as double) * 100;
 
-      debugPrint("🔍 confidence: ${confidence.toStringAsFixed(1)}%");
+      if (confidence < 70) {
+        setState(() => message = "🎤 ไม่แน่ใจ ลองอ่านใหม่อีกครั้ง");
+        return;
+      }
+
       _checkAnswer(level);
-    } catch (e, stackTrace) {
-      debugPrint('❌ AI Error: $e');
-      debugPrint('❌ Stack: $stackTrace');
+    } catch (e) {
       setState(() => message = "❌ Error: $e");
     } finally {
       setState(() => isAnalyzing = false);
     }
   }
 
-  /// ตรวจสอบคำตอบและให้คะแนน
-  /// ตรวจสอบคำตอบและให้คะแนน (แก้ไขให้ตรงกับ Label ใหม่)
   void _checkAnswer(String level) async {
     await _audioPlayer.stop();
 
     setState(() {
-      // ดักจับกรณีเสียงเงียบหรือไม่ชัด (เหมือนเดิม)
       if (level == 'silent' ||
           level == 'isSilence' ||
           level.contains("เงียบ")) {
@@ -223,20 +225,19 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
 
       showNextButton = true;
 
-      // 🎯 แก้ตรงนี้ให้ตรงกับ labelMap ใน ModelService
+      // ✅ แก้: นับ passCount / failCount และ XP ที่ถูกต้อง
       switch (level) {
         case 'ผ่าน':
-          excellentCount++;
-          _currentXp += 10;
+          passCount++;
+          _currentXp += _xpPerPass;
           message = "🌟 ผ่าน";
           break;
         case 'ไม่ผ่าน':
-          goodCount++;
-          _currentXp += 2;
-          message = "👍 ไม่ผ่าน";
+          failCount++;
+          _currentXp += _xpPerFail;
+          message = "❌ ไม่ผ่าน";
           break;
         default:
-          // กรณีอื่นๆ ให้แสดงตามที่โมเดลส่งมาตรงๆ เลย
           message = level;
       }
     });
@@ -251,7 +252,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
       setState(() {
         currentAyah++;
         message = "";
-        recordMessage = ""; // 🔴 ล้างด้วย
+        recordMessage = "";
         hasPlayed = false;
         showNextButton = false;
         hasRecorded = false;
@@ -261,42 +262,39 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
       });
 
       _slideController.reset();
-      await _playAyah(); // 🟡 เล่นอัตโนมัติเมื่อไปอายะห์ถัดไป (มีอยู่แล้ว ยืนยันว่าทำงาน)
+      await _playAyah();
     } else {
       await _finishSurah();
       _showSummaryDialog();
     }
   }
 
-  // 🟡 weighted score แทน excellentPercent
+  // ✅ แก้: คำนวณจาก passCount / failCount
   String _getResultText() {
-    int total = excellentCount + goodCount + tryCount;
-    if (total == 0) return "💪 พยายาม";
-
-    // นับสัดส่วนแทน avgXp
-    double goodRatio = (excellentCount + goodCount) / total;
-
-    if (goodRatio >= 0.7) return "✅ ดีเยี่ยม";
-    if (goodRatio >= 0.4) return "👍 พอใช้";  // พอใช้ 2/4 = 50% → ได้พอใช้
-    return "💪 พยายาม";
+    final int total = passCount + failCount;
+    if (total == 0) return "💪 ต้องฝึกเพิ่ม";
+    final double passRate = passCount / total;
+    if (passRate >= 0.8) return "✅ ดีเยี่ยม";
+    if (passRate >= 0.5) return "👍 พอใช้";
+    return "💪 ต้องฝึกเพิ่ม";
   }
 
   Future<void> _finishSurah() async {
-  setState(() => levelCompleted = true);
+    setState(() => levelCompleted = true);
 
-  final int total = excellentCount + goodCount + tryCount;
-  final double aiScore = total > 0 ? _currentXp / (total * 10) : 0.0;
+    final int total = passCount + failCount;
+    final double aiScore = total > 0 ? passCount / total : 0.0;
 
-  await FirestoreService().savePracticeResult(
-    gameType: "surah",
-    sublevel: 1,
-    itemPlayed: widget.title,
-    isCorrect: _getResultText().contains("✅") || _getResultText().contains("👍"),
-    xpGained: _currentXp,
-    aiScore: aiScore,
-    aiFeedback: _getResultText(),
-  );
-}
+    await FirestoreService().savePracticeResult(
+      gameType: "surah",
+      sublevel: 1,
+      itemPlayed: widget.title,
+      isCorrect: _getResultText().contains("✅") || _getResultText().contains("👍"),
+      xpGained: _currentXp,
+      aiScore: aiScore,
+      aiFeedback: _getResultText(),
+    );
+  }
 
   Future<bool> _showExitConfirmation() async {
     if (!started) return true;
@@ -340,13 +338,17 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
   }
 
   void _showSummaryDialog() {
-    String resultText = _getResultText();
-    Color resultColor = resultText.contains("✅")
+    final String resultText = _getResultText();
+    final int total = passCount + failCount;
+    final int passPercent = total > 0 ? (passCount / total * 100).round() : 0;
+
+    // ✅ แก้: สีตาม resultText ที่ถูกต้อง
+    final Color resultColor = resultText.contains("✅")
         ? Colors.green
         : resultText.contains("👍")
             ? Colors.orange
             : Colors.deepOrange;
-    IconData resultIcon =
+    final IconData resultIcon =
         resultText.contains("✅") ? Icons.celebration : Icons.fitness_center;
 
     showDialog(
@@ -360,7 +362,9 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
             gradient: LinearGradient(
               colors: resultText.contains("✅")
                   ? [Colors.green, Colors.green.shade700]
-                  : [Colors.orange, Colors.deepOrange],
+                  : resultText.contains("👍")
+                      ? [Colors.orange, Colors.deepOrange]
+                      : [Colors.deepOrange, Colors.red],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -388,6 +392,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ผลโดยรวม
               Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
@@ -412,18 +417,36 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              _buildResultRow("🌟 ผ่าน", excellentCount, Colors.green),
+
+              // ✅ แก้: แสดง passCount / failCount ถูกต้อง
+              _buildResultRow("🌟 ผ่าน", passCount, Colors.green),
               const SizedBox(height: 10),
-              _buildResultRow("👍 ไม่ผ่าน", goodCount, Colors.orange),
+              _buildResultRow("❌ ไม่ผ่าน", failCount, Colors.red),
               const SizedBox(height: 10),
               const Divider(),
-              Text(
-                "รวมทั้งหมด: ${widget.ayahCount} อายะห์",
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+
+              // รวมและเปอร์เซ็นต์
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "รวม $total อายะห์",
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    "อัตราผ่าน $passPercent%",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: resultColor,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
-              // 🟡 แสดง XP ที่ได้รับ
+
+              // XP
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -438,7 +461,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                     const Icon(Icons.star, color: Colors.yellow, size: 24),
                     const SizedBox(width: 8),
                     Text(
-                      "ได้รับ $_currentXp XP",
+                      "ได้รับ $_currentXp / 200 XP",
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -467,9 +490,8 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
               Navigator.pop(context);
               setState(() {
                 currentAyah = 1;
-                excellentCount = 0;
-                goodCount = 0;
-                tryCount = 0;
+                passCount = 0;
+                failCount = 0;
                 message = "";
                 recordMessage = "";
                 hasPlayed = false;
@@ -625,7 +647,6 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      // 🟢 XP สะสมมุมบนขวา
                       if (started)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -767,9 +788,13 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           "${widget.ayahCount} อายะห์",
           style: TextStyle(fontSize: 18, color: Colors.grey[600]),
         ),
+        const SizedBox(height: 10),
+        Text(
+          "ผ่านทุกอายะห์รับสูงสุด 200 XP",
+          style: TextStyle(fontSize: 14, color: Colors.green[600]),
+        ),
         const SizedBox(height: 50),
         _buildGradientButton(
-          // 🔴 กด "เริ่มฝึก" → เล่นเสียงอัตโนมัติ
           onPressed: () async {
             setState(() => started = true);
             await _playAyah();
@@ -926,7 +951,6 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                   ),
                 ],
 
-                // 🔴 recordMessage แยกออกมาต่างหาก
                 if (recordMessage.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
@@ -955,7 +979,6 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
           const SizedBox(height: 30),
 
           // AI Analysis Button
-          // 🟡 disable ถ้ายังไม่เคยฟังอายะห์เลย
           if (!showNextButton) ...[
             _buildGradientButton(
               onPressed:
@@ -998,17 +1021,17 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
 
           const SizedBox(height: 20),
 
-          // ผลประเมิน AI
+          // ✅ แก้: สีถูกต้องตาม pass/fail
           if (message.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
-                color: message.contains("🌟") || message.contains("👍")
+                color: message.contains("🌟")
                     ? Colors.green.withOpacity(0.1)
                     : Colors.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: message.contains("🌟") || message.contains("👍")
+                  color: message.contains("🌟")
                       ? Colors.green.withOpacity(0.3)
                       : Colors.red.withOpacity(0.3),
                 ),
@@ -1018,7 +1041,7 @@ class _SurahDetailScreenState extends State<SurahDetailScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: message.contains("🌟") || message.contains("👍")
+                  color: message.contains("🌟")
                       ? Colors.green[700]
                       : Colors.red[700],
                 ),
